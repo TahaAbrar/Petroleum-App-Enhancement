@@ -1,10 +1,217 @@
 @import "tailwindcss";
 
-:root {
-  --fuel-yellow: #f5c518;
-  --surface: #f3f4f6;
-  --ink: #1a1d21;
-  --font: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --color-fuel: #f5c518;
+  --color-fuel-deep: #e6b800;
+  --color-fuel-soft: #fff4c7;
+  --color-surface: #f4f5f7;
+  --color-ink: #1a1d21;
+  --color-muted: #6b7280;
+  --color-line: #eceef2;
+  --color-navy: #1a2f4b;
+  --color-lime: #5dbb46;
+  --color-orange: #f38b20;
+  --color-credit: #16a34a;
+  --color-credit-bg: #e8f8ee;
+  --color-debit: #e11d48;
+  --color-debit-bg: #fde8ec;
+  --shadow-card: 0 8px 28px rgba(26, 29, 33, 0.06);
+  --shadow-auth: 0 18px 50px rgba(26, 29, 33, 0.1);
+  --animate-fade-up: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-rise: rise 0.55s ease both;
+  --animate-login-in: login-in 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-intro-exit: intro-exit 0.55s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  --animate-shine: shine-sweep 2.4s 0.4s ease-in-out forwards;
+  --animate-orb: orb-in 1.2s ease forwards;
+  --animate-ring: ring-pulse 2.2s ease-out infinite;
+  --animate-letter: letter-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-loader: loader-fill 1.6s 1.35s cubic-bezier(0.45, 0, 0.2, 1) forwards;
+  --animate-float: logo-float 4.8s ease-in-out infinite;
+  --animate-stagger: stagger-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes login-in {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes intro-exit {
+  to {
+    opacity: 0;
+    transform: scale(0.94) translateY(-14px);
+    filter: blur(4px);
+  }
+}
+
+@keyframes shine-sweep {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes orb-in {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ring-pulse {
+  0% {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+  35% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.18);
+  }
+}
+
+@keyframes letter-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes loader-fill {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes logo-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes glow-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+}
+
+@keyframes note-back {
+  from {
+    opacity: 0;
+    transform: translate(-18px, 14px) rotate(-12deg) scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes note-mid {
+  from {
+    opacity: 0;
+    transform: translate(-8px, 10px) rotate(-4deg) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes note-front {
+  from {
+    opacity: 0;
+    transform: translate(16px, 18px) scale(0.82);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes badge-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes arrow-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes arrow-head {
+  from {
+    opacity: 0;
+    transform: scale(0.4) translate(-6px, 4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 *,
@@ -21,14 +228,171 @@ body,
 
 body {
   margin: 0;
-  font-family: var(--font);
-  color: var(--ink);
-  background: var(--surface);
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background: var(--color-surface);
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
 }
 
 button,
 input {
   font: inherit;
 }
+
+/* SVG logo piece-by-piece intro (targets internal SVG classes) */
+.fl-logo {
+  overflow: visible;
+}
+
+.fl-logo--animated .fl-logo__glow {
+  opacity: 0;
+  transform-origin: center;
+  animation: glow-pop 0.9s 0.15s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.fl-logo--animated .fl-logo__note--back {
+  opacity: 0;
+  transform-origin: 40% 55%;
+  animation: note-back 0.7s 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.fl-logo--animated .fl-logo__note--mid {
+  opacity: 0;
+  transform-origin: 50% 50%;
+  animation: note-mid 0.7s 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.fl-logo--animated .fl-logo__note--front {
+  opacity: 0;
+  transform-origin: 60% 50%;
+  animation: note-front 0.75s 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.fl-logo--animated .fl-logo__badge,
+.fl-logo--animated .fl-logo__dollar {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: badge-pop 0.55s 0.95s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.fl-logo--animated .fl-logo__arrow-path {
+  stroke-dasharray: 180;
+  stroke-dashoffset: 180;
+  animation: arrow-draw 0.95s 0.7s cubic-bezier(0.45, 0, 0.2, 1) forwards;
+}
+
+.fl-logo--animated .fl-logo__arrow-head {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: arrow-head 0.4s 1.35s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fl-logo--animated * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .fl-logo--animated .fl-logo__arrow-path {
+    stroke-dashoffset: 0;
+  }
+
+  .chart-bar,
+  .chart-line,
+  .chart-area,
+  .chart-dot,
+  .chart-axis-label {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    stroke-dashoffset: 0 !important;
+  }
+}
+
+/* ---------- Dashboard chart animations ---------- */
+
+@keyframes chart-bar-grow {
+  from {
+    opacity: 0.35;
+    transform: scaleY(0);
+  }
+  70% {
+    transform: scaleY(1.06);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@keyframes chart-line-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes chart-area-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes chart-dot-pop {
+  from {
+    opacity: 0;
+    transform: scale(0);
+  }
+  65% {
+    transform: scale(1.25);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes chart-label-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.chart-bar {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  opacity: 0;
+  animation: chart-bar-grow 0.7s cubic-bezier(0.22, 1.2, 0.36, 1) forwards;
+}
+
+.chart-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: chart-line-draw 1.35s 0.2s cubic-bezier(0.45, 0, 0.2, 1) forwards;
+}
+
+.chart-area {
+  opacity: 0;
+  animation: chart-area-in 0.9s 0.55s ease forwards;
+}
+
+.chart-dot {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: chart-dot-pop 0.45s cubic-bezier(0.34, 1.5, 0.64, 1) forwards;
+}
+
+.chart-axis-label {
+  opacity: 0;
+  animation: chart-label-in 0.4s ease forwards;
+}
+
