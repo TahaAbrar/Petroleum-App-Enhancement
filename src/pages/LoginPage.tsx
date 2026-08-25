@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FuelLedgerLogo } from '../components/FuelLedgerLogo'
-import { setAuthenticated } from '../lib/auth'
+import { apiLogin, setSession } from '../lib/auth'
+import { toast } from '../toast'
 
 type Phase = 'intro' | 'exit' | 'login'
 
@@ -12,20 +13,15 @@ const EXIT_MS = 650
 const fieldIcon =
   'pointer-events-none absolute left-3.5 top-1/2 h-[1.15rem] w-[1.15rem] -translate-y-1/2 text-muted'
 
-function MailIcon() {
+function UserIcon() {
   return (
     <svg className={fieldIcon} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.7" />
       <path
-        d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5v-9Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-      />
-      <path
-        d="m5.5 8 5.7 4.1a1.5 1.5 0 0 0 1.6 0L18.5 8"
+        d="M5 19.5c0-3.2 3.1-5.2 7-5.2s7 2 7 5.2"
         stroke="currentColor"
         strokeWidth="1.7"
         strokeLinecap="round"
-        strokeLinejoin="round"
       />
     </svg>
   )
@@ -78,11 +74,12 @@ const inputClass =
 export default function LoginPage() {
   const navigate = useNavigate()
   const [phase, setPhase] = useState<Phase>('intro')
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -100,14 +97,29 @@ export default function LoginPage() {
     }
   }, [])
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    setError('')
     setSubmitting(true)
-    window.setTimeout(() => {
-      setAuthenticated(true)
+    try {
+      const data = await apiLogin(username.trim(), password)
+      setSession({
+        token: data.token,
+        user: data.user,
+        redirectTo: data.redirectTo,
+      })
+      if (!remember) {
+        // sessionStorage already; remember only affects session duration UX for now
+      }
+      toast.success('Login successful. Welcome back.')
+      navigate(data.redirectTo, { replace: true })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Login failed'
+      setError(message)
+      toast.error(message)
+    } finally {
       setSubmitting(false)
-      navigate('/dashboard', { replace: true })
-    }, 700)
+    }
   }
 
   return (
@@ -207,19 +219,19 @@ export default function LoginPage() {
 
             <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
               <div className="animate-stagger flex flex-col gap-1.5 opacity-0" style={{ animationDelay: '0.05s' }}>
-                <label htmlFor="email" className="text-[0.8125rem] font-semibold text-ink">
-                  Email
+                <label htmlFor="username" className="text-[0.8125rem] font-semibold text-ink">
+                  Username
                 </label>
                 <div className="relative">
-                  <MailIcon />
+                  <UserIcon />
                   <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
-                    placeholder="you@company.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    id="username"
+                    name="username"
+                    type="text"
+                    autoComplete="username"
+                    placeholder="Enter your username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
                     required
                     className={inputClass}
                   />
@@ -271,6 +283,12 @@ export default function LoginPage() {
                   Forgot password?
                 </a>
               </div>
+
+              {error ? (
+                <p className="m-0 rounded-xl border border-debit/20 bg-debit-bg px-3 py-2 text-center text-[0.8rem] font-semibold text-debit" role="alert">
+                  {error}
+                </p>
+              ) : null}
 
               <button
                 type="submit"

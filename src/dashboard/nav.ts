@@ -1,0 +1,100 @@
+import type { BottomNavItem, NavItem, PortalRole } from './types'
+
+const NAV_BASE: NavItem[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: 'grid', path: '/dashboard' },
+  { id: 'customers', label: 'Customers', icon: 'users', path: '/customers' },
+  { id: 'credit', label: 'Credit', icon: 'credit', path: '/credit' },
+  { id: 'debit', label: 'Debit', icon: 'debit', path: '/debit' },
+  { id: 'transactions', label: 'Transactions', icon: 'swap', path: '/transactions' },
+  { id: 'reports', label: 'Reports', icon: 'doc', path: '/reports' },
+  { id: 'settings', label: 'Settings', icon: 'gear', path: '/settings' },
+]
+
+const BOTTOM_BASE = [
+  { id: 'home', label: 'Home', path: '/dashboard', icon: 'home' },
+  { id: 'customers', label: 'Customers', path: '/customers', icon: 'users' },
+  { id: 'fab', label: 'Add', path: '/credit', icon: 'plus' },
+  { id: 'transactions', label: 'Txns', path: '/transactions', icon: 'swap' },
+  { id: 'more', label: 'More', path: '/settings', icon: 'more' },
+] as const
+
+function withPrefix(path: string, prefix: string) {
+  if (!prefix) return path
+  if (path === '/dashboard') return `${prefix}/dashboard`
+  return `${prefix}${path}`
+}
+
+export function buildNav(role: PortalRole): NavItem[] {
+  const prefix =
+    role === 'Accountant' ? '/accountant' : role === 'User' ? '/user' : ''
+
+  const allowed =
+    role === 'Administrator'
+      ? NAV_BASE
+      : role === 'Accountant'
+        ? NAV_BASE.filter((n) =>
+            ['dashboard', 'customers', 'credit', 'debit', 'transactions', 'reports'].includes(
+              n.id,
+            ),
+          )
+        : NAV_BASE.filter((n) => ['dashboard', 'transactions', 'reports'].includes(n.id))
+
+  return allowed.map((item) => ({
+    ...item,
+    path: withPrefix(item.path, prefix),
+  }))
+}
+
+export function buildBottomNav(role: PortalRole): BottomNavItem[] {
+  const prefix =
+    role === 'Accountant' ? '/accountant' : role === 'User' ? '/user' : ''
+
+  return BOTTOM_BASE.map((item) => ({
+    ...item,
+    path:
+      item.id === 'home'
+        ? withPrefix('/dashboard', prefix)
+        : item.id === 'more'
+          ? withPrefix('/settings', prefix)
+          : withPrefix(item.path, prefix),
+  })).filter((item) => {
+    if (role === 'User' && (item.id === 'customers' || item.id === 'fab')) return false
+    return true
+  })
+}
+
+export function adminConfig() {
+  const nav = buildNav('Administrator')
+  return {
+    portalTitle: 'Petroleum Accounting System',
+    roleLabel: 'Super Admin',
+    nav,
+    bottomNav: buildBottomNav('Administrator'),
+    homePath: '/dashboard',
+    txPath: '/transactions',
+  }
+}
+
+export function accountantConfig() {
+  const nav = buildNav('Accountant')
+  return {
+    portalTitle: 'Accountant Portal',
+    roleLabel: 'Accountant',
+    nav,
+    bottomNav: buildBottomNav('Accountant'),
+    homePath: '/accountant/dashboard',
+    txPath: '/accountant/transactions',
+  }
+}
+
+export function userConfig() {
+  const nav = buildNav('User')
+  return {
+    portalTitle: 'User Portal',
+    roleLabel: 'User',
+    nav,
+    bottomNav: buildBottomNav('User'),
+    homePath: '/user/dashboard',
+    txPath: '/user/transactions',
+  }
+}
