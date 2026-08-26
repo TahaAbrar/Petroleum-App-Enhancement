@@ -10,6 +10,7 @@ import { DashboardHome, SectionPlaceholder } from './DashboardHome'
 import { TransactionsPage } from './TransactionsPage'
 import { CreditPage } from './CreditPage'
 import { DebitPage } from './DebitPage'
+import { ReportsPage } from './ReportsPage'
 
 type Props = {
   config: DashboardConfig
@@ -298,6 +299,8 @@ export function DashboardShell({ config }: Props) {
             <CreditPage homePath={homePath} txPath={txPath} searchQuery={query} />
           ) : active === 'debit' ? (
             <DebitPage homePath={homePath} txPath={txPath} searchQuery={query} />
+          ) : active === 'reports' ? (
+            <ReportsPage homePath={homePath} txPath={txPath} />
           ) : showSection ? (
             <SectionPlaceholder title={activeLabel} path={activePath} />
           ) : (
@@ -338,28 +341,16 @@ export function DashboardShell({ config }: Props) {
               )
             }
 
-            const moreActive =
-              item.id === 'more' &&
-              (sidebarOpen || location.pathname.endsWith('/reports'))
-
             const activeTab =
               item.id === 'home'
                 ? location.pathname === homePath
-                : item.id === 'more'
-                  ? moreActive
-                  : location.pathname === item.path
+                : location.pathname === item.path
 
             return (
               <button
                 key={item.id}
                 type="button"
-                onClick={() => {
-                  if (item.id === 'more') {
-                    setSidebarOpen(true)
-                    return
-                  }
-                  navigate(item.path)
-                }}
+                onClick={() => navigate(item.path)}
                 className={`flex min-w-0 flex-col items-center justify-center gap-1 border-0 bg-transparent px-0.5 ${
                   activeTab ? 'text-fuel' : 'text-[#8B93A1]'
                 }`}

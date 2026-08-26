@@ -14,7 +14,7 @@ const BOTTOM_BASE = [
   { id: 'customers', label: 'Customers', path: '/customers', icon: 'users' },
   { id: 'fab', label: 'Add', path: '/credit', icon: 'plus' },
   { id: 'transactions', label: 'Txns', path: '/transactions', icon: 'swap' },
-  { id: 'more', label: 'More', path: '/reports', icon: 'more' },
+  { id: 'reports', label: 'Reports', path: '/reports', icon: 'doc' },
 ] as const
 
 function withPrefix(path: string, prefix: string) {
@@ -53,9 +53,7 @@ export function buildBottomNav(role: PortalRole): BottomNavItem[] {
     path:
       item.id === 'home'
         ? withPrefix('/dashboard', prefix)
-        : item.id === 'more'
-          ? withPrefix('/reports', prefix)
-          : withPrefix(item.path, prefix),
+        : withPrefix(item.path, prefix),
   })).filter((item) => {
     if (role === 'User' && (item.id === 'customers' || item.id === 'fab')) return false
     return true

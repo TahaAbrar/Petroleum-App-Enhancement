@@ -147,6 +147,14 @@ export function BottomIcon({ name }: { name: string }) {
       </svg>
     )
   }
+  if (name === 'doc') {
+    return (
+      <svg {...props}>
+        <path d="M4 19V9l4-5h8l4 5v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1Z" />
+        <path d="M8 19v-6h8v6M9 9h6" />
+      </svg>
+    )
+  }
   return (
     <svg {...props}>
       <circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none" />
