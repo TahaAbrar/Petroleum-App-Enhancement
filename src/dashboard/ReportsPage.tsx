@@ -16,6 +16,7 @@ import { toast } from '../toast'
 type Props = {
   homePath: string
   txPath: string
+  searchQuery?: string
 }
 
 export function ReportsPage({ homePath, txPath }: Props) {

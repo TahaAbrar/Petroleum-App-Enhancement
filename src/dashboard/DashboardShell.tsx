@@ -11,6 +11,7 @@ import { TransactionsPage } from './TransactionsPage'
 import { CreditPage } from './CreditPage'
 import { DebitPage } from './DebitPage'
 import { ReportsPage } from './ReportsPage'
+import { ChartOfAccountsPage } from './ChartOfAccountsPage'
 
 type Props = {
   config: DashboardConfig
@@ -300,7 +301,9 @@ export function DashboardShell({ config }: Props) {
           ) : active === 'debit' ? (
             <DebitPage homePath={homePath} txPath={txPath} searchQuery={query} />
           ) : active === 'reports' ? (
-            <ReportsPage homePath={homePath} txPath={txPath} />
+            <ReportsPage homePath={homePath} txPath={txPath} searchQuery={query} />
+          ) : active === 'chartOfAccounts' ? (
+            <ChartOfAccountsPage homePath={homePath} searchQuery={query} />
           ) : showSection ? (
             <SectionPlaceholder title={activeLabel} path={activePath} />
           ) : (
