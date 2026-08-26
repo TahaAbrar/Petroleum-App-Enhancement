@@ -9,6 +9,7 @@ import {
   type TxType,
 } from './transactionsData'
 import { panel } from './styles'
+import { peekTransactions } from './pageCache'
 
 type Props = {
   homePath: string
@@ -24,6 +25,10 @@ type Filters = {
 const PAGE_SIZE_OPTIONS = [10, 25, 50] as const
 
 export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
+  const cached = peekTransactions()
+  const allRows = cached?.rows ?? ALL_TRANSACTIONS
+  const customers = cached?.customers ?? TX_CUSTOMERS
+  const summary = cached?.summary ?? TX_SUMMARY
   const [draft, setDraft] = useState<Filters>({
     customer: '',
     dateLabel: DEFAULT_DATE_LABEL,
@@ -37,7 +42,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
-    let rows = ALL_TRANSACTIONS.filter((row) => {
+    let rows = allRows.filter((row) => {
       if (applied.customer && row.customer !== applied.customer) return false
       if (applied.type !== 'All' && row.type !== applied.type) return false
       if (!q) return true
@@ -54,7 +59,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
       return sortDir === 'asc' ? cmp : -cmp
     })
     return rows
-  }, [applied, searchQuery, sortDir])
+  }, [applied, searchQuery, sortDir, allRows])
 
   const total = filtered.length
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
@@ -146,7 +151,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
                 className="w-full cursor-pointer appearance-none rounded-xl border border-line bg-[#fafbfc] py-2.5 pr-9 pl-3 text-[0.85rem] font-medium text-ink outline-none focus:border-fuel"
               >
                 <option value="">Search customer...</option>
-                {TX_CUSTOMERS.map((c) => (
+                {customers.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
@@ -226,7 +231,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
           <SummaryMobile
             tone="fuel"
             label="Total Transactions"
-            value={TX_SUMMARY.totalTransactions.value}
+            value={summary.totalTransactions.value}
             change="+12.5%"
             changeUp
             icon="swap"
@@ -234,7 +239,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
           <SummaryMobile
             tone="credit"
             label="Total Credit"
-            value={`${TX_SUMMARY.totalCredit.value} PKR`}
+            value={`${summary.totalCredit.value} PKR`}
             change="+8.4%"
             changeUp
             icon="down"
@@ -242,7 +247,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
           <SummaryMobile
             tone="debit"
             label="Total Debit"
-            value={`${TX_SUMMARY.totalDebit.value} PKR`}
+            value={`${summary.totalDebit.value} PKR`}
             change="+6.2%"
             changeUp={false}
             icon="up"
@@ -250,7 +255,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
           <SummaryMobile
             tone="blue"
             label="Net Flow"
-            value={`${TX_SUMMARY.netFlow.value} PKR`}
+            value={`${summary.netFlow.value} PKR`}
             change="+5.3%"
             changeUp
             icon="wallet"
@@ -262,32 +267,32 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
       <section className="hidden grid-cols-4 gap-4 lg:grid" aria-label="Summary">
         <SummaryDesktop
           label="Total Transactions"
-          value={TX_SUMMARY.totalTransactions.value}
-          change={TX_SUMMARY.totalTransactions.change}
+          value={summary.totalTransactions.value}
+          change={summary.totalTransactions.change}
           tone="up"
           iconBg="bg-fuel text-ink"
           icon="swap"
         />
         <SummaryDesktop
           label="Total Credit"
-          value={`${TX_SUMMARY.totalCredit.value} PKR`}
-          change={TX_SUMMARY.totalCredit.change}
+          value={`${summary.totalCredit.value} PKR`}
+          change={summary.totalCredit.change}
           tone="up"
           iconBg="bg-credit-bg text-credit"
           icon="down"
         />
         <SummaryDesktop
           label="Total Debit"
-          value={`${TX_SUMMARY.totalDebit.value} PKR`}
-          change={TX_SUMMARY.totalDebit.change}
+          value={`${summary.totalDebit.value} PKR`}
+          change={summary.totalDebit.change}
           tone="down"
           iconBg="bg-debit-bg text-debit"
           icon="up"
         />
         <SummaryDesktop
           label="Net Flow"
-          value={`${TX_SUMMARY.netFlow.value} PKR`}
-          change={TX_SUMMARY.netFlow.change}
+          value={`${summary.netFlow.value} PKR`}
+          change={summary.netFlow.change}
           tone="up"
           iconBg="bg-[#e8f0fe] text-[#2563eb]"
           icon="wallet"

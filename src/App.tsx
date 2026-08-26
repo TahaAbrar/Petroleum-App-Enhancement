@@ -18,6 +18,7 @@ export default function App() {
         <Route element={<RoleRoute allow={['Administrator']} />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/customers" element={<Dashboard />} />
+          <Route path="/customers/:slug" element={<Dashboard />} />
           <Route path="/credit" element={<Dashboard />} />
           <Route path="/debit" element={<Dashboard />} />
           <Route path="/transactions" element={<Dashboard />} />
@@ -27,6 +28,7 @@ export default function App() {
         <Route element={<RoleRoute allow={['Accountant']} />}>
           <Route path="/accountant/dashboard" element={<AccountantDashboard />} />
           <Route path="/accountant/customers" element={<AccountantDashboard />} />
+          <Route path="/accountant/customers/:slug" element={<AccountantDashboard />} />
           <Route path="/accountant/credit" element={<AccountantDashboard />} />
           <Route path="/accountant/debit" element={<AccountantDashboard />} />
           <Route path="/accountant/transactions" element={<AccountantDashboard />} />

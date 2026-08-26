@@ -1,4 +1,13 @@
-import { verifyToken } from './security.js'
+import { env } from './config.js'
+import { safeEqualKey, verifyToken } from './security.js'
+
+export function requireReadKey(req, res, next) {
+  const sent = req.headers['x-fuelledger-key']
+  if (!safeEqualKey(sent, env.apiReadKey)) {
+    return res.status(401).json({ ok: false, message: 'Invalid API key' })
+  }
+  return next()
+}
 
 export function requireAuth(req, res, next) {
   try {

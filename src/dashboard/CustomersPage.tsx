@@ -1,74 +1,211 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { toast } from '../toast'
 import {
-  CUSTOMERS,
-  formatFilterDate,
+  customerSlug,
+  displayText,
   formatPkr,
   type Customer,
+  type CustomerGroup,
   type CustomerStatus,
-  type CustomerType,
 } from './customers'
+import { applyDateRange, DateRangeFilter, MenuFilter } from './filters'
 import { CustomerDetailsPage } from './CustomerDetailsPage'
 import { CustomerMark } from './icons'
+import { LoadingHint } from './loading'
+import {
+  CUSTOMER_BATCH,
+  CUSTOMER_CHUNK,
+  loadCustomerGroups,
+  loadCustomerListPage,
+  peekCustomerGroups,
+  peekCustomerList,
+  type CustomerListParams,
+} from './pageCache'
 import { panel } from './styles'
-
-const PAGE_SIZE = 10
-
-const filterBox =
-  'flex h-10 w-full min-w-0 items-center gap-1.5 rounded-xl border border-line bg-white px-2 text-[0.72rem] font-semibold text-ink shadow-[0_2px_8px_rgba(26,29,33,0.04)] focus-within:border-fuel focus-within:shadow-[0_0_0_3px_rgba(245,197,24,0.18)] sm:h-11 sm:gap-2 sm:px-3 sm:text-[0.82rem] lg:w-[11.5rem]'
 
 type Props = {
   searchQuery?: string
   txPath: string
 }
 
-export function CustomersPage({ searchQuery = '', txPath }: Props) {
-  const [rows, setRows] = useState<Customer[]>(CUSTOMERS)
-  const [date, setDate] = useState('')
+export function CustomersPage({ searchQuery = '' }: Props) {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { slug } = useParams<{ slug?: string }>()
+  const listPath = location.pathname.startsWith('/accountant')
+    ? '/accountant/customers'
+    : '/customers'
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [status, setStatus] = useState<CustomerStatus | ''>('')
-  const [type, setType] = useState<CustomerType | ''>('')
-  const [page, setPage] = useState(1)
-  const [viewing, setViewing] = useState<Customer | null>(null)
-
-  const filtered = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    return rows.filter((c) => {
-      if (date && c.createdAt < date) return false
-      if (status && c.status !== status) return false
-      if (type && c.type !== type) return false
-      if (!q) return true
-      return (
-        c.id.toLowerCase().includes(q) ||
-        c.name.toLowerCase().includes(q) ||
-        c.phone.toLowerCase().includes(q) ||
-        c.email.toLowerCase().includes(q)
-      )
-    })
-  }, [rows, date, status, type, searchQuery])
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const currentPage = Math.min(page, totalPages)
-  const start = (currentPage - 1) * PAGE_SIZE
-  const pageRows = filtered.slice(start, start + PAGE_SIZE)
-  const showingFrom = filtered.length === 0 ? 0 : start + 1
-  const showingTo = Math.min(start + PAGE_SIZE, filtered.length)
+  const [type, setType] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState(searchQuery)
+  const params: CustomerListParams = useMemo(
+    () => ({
+      q: debouncedQuery.trim(),
+      dateFrom,
+      dateTo,
+      status,
+      type,
+    }),
+    [debouncedQuery, dateFrom, dateTo, status, type],
+  )
+  const seeded = peekCustomerList(params)
+  const [fetched, setFetched] = useState<Customer[]>(() => seeded?.customers ?? [])
+  const [total, setTotal] = useState(() => seeded?.total ?? 0)
+  const [visible, setVisible] = useState(() => Math.min(CUSTOMER_CHUNK, seeded?.customers.length ?? 0))
+  const [loading, setLoading] = useState(() => !seeded)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [groups, setGroups] = useState<CustomerGroup[]>(() => peekCustomerGroups() ?? [])
+  const inflight = useRef(false)
+  const fetchedRef = useRef(fetched)
+  const totalRef = useRef(total)
+  const afterFiveMobileRef = useRef<HTMLLIElement | null>(null)
+  const afterFiveDesktopRef = useRef<HTMLTableRowElement | null>(null)
+  const mobileSentinelRef = useRef<HTMLDivElement | null>(null)
+  const desktopSentinelRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    setPage(1)
-  }, [searchQuery, date, status, type])
+    fetchedRef.current = fetched
+  }, [fetched])
+  useEffect(() => {
+    totalRef.current = total
+  }, [total])
 
-  function handleDelete(customer: Customer) {
-    setRows((prev) => prev.filter((c) => c.id !== customer.id))
-    if (viewing?.id === customer.id) setViewing(null)
-    toast.success(`${customer.name} removed`)
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQuery(searchQuery), 200)
+    return () => window.clearTimeout(t)
+  }, [searchQuery])
+
+  useEffect(() => {
+    const ac = new AbortController()
+    loadCustomerGroups()
+      .then(setGroups)
+      .catch(() => {
+        if (!ac.signal.aborted) toast.error('Could not load account types')
+      })
+    return () => ac.abort()
+  }, [])
+
+  useEffect(() => {
+    if (slug) return
+    const cached = peekCustomerList(params)
+    if (cached) {
+      setFetched(cached.customers)
+      setTotal(cached.total)
+      setVisible(Math.min(CUSTOMER_CHUNK, cached.customers.length))
+      setLoading(false)
+    } else {
+      setFetched([])
+      setTotal(0)
+      setVisible(CUSTOMER_CHUNK)
+      setLoading(true)
+    }
+    inflight.current = true
+    loadCustomerListPage(params, 1)
+      .then((data) => {
+        setFetched(data.customers)
+        setTotal(data.total)
+        setVisible(Math.min(CUSTOMER_CHUNK, data.customers.length || data.total))
+      })
+      .catch((err) => {
+        if (cached) return
+        setFetched([])
+        setTotal(0)
+        toast.error(err instanceof Error ? err.message : 'Could not load customers')
+      })
+      .finally(() => {
+        inflight.current = false
+        setLoading(false)
+      })
+  }, [params, slug])
+
+  const loadNextBatch = useCallback(async () => {
+    if (slug || inflight.current) return
+    const have = fetchedRef.current.length
+    if (have >= totalRef.current) return
+    inflight.current = true
+    setLoadingMore(true)
+    const nextPage = Math.floor(have / CUSTOMER_BATCH) + 1
+    try {
+      const data = await loadCustomerListPage(params, nextPage)
+      setTotal(data.total)
+      setFetched((prev) => {
+        const seen = new Set(prev.map((row) => row.accid))
+        return [...prev, ...data.customers.filter((row) => !seen.has(row.accid))]
+      })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not load more customers')
+    } finally {
+      inflight.current = false
+      setLoadingMore(false)
+    }
+  }, [params, slug])
+
+  const revealMore = useCallback(() => {
+    if (visible >= totalRef.current) return
+    const next = visible + CUSTOMER_CHUNK
+    if (fetchedRef.current.length < Math.min(next, totalRef.current)) {
+      void loadNextBatch()
+    }
+    setVisible((v) => Math.min(v + CUSTOMER_CHUNK, totalRef.current || v + CUSTOMER_CHUNK))
+  }, [visible, loadNextBatch])
+
+  useEffect(() => {
+    if (loading || slug) return
+    if (fetched.length < total && fetched.length <= visible + CUSTOMER_CHUNK) {
+      void loadNextBatch()
+    }
+  }, [loading, slug, fetched.length, total, visible, loadNextBatch])
+
+  const rows = fetched.slice(0, Math.min(visible, fetched.length))
+  const hasMore = visible < total
+
+  useEffect(() => {
+    const observers: IntersectionObserver[] = []
+    const watch = (target: Element | null) => {
+      if (!target) return
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((e) => e.isIntersecting)) revealMore()
+        },
+        { root: null, rootMargin: '220px 0px', threshold: 0.01 },
+      )
+      observer.observe(target)
+      observers.push(observer)
+    }
+    watch(afterFiveMobileRef.current)
+    watch(afterFiveDesktopRef.current)
+    watch(mobileSentinelRef.current)
+    watch(desktopSentinelRef.current)
+    return () => observers.forEach((o) => o.disconnect())
+  }, [revealMore, hasMore, rows.length])
+
+  const typeOptions = useMemo(
+    () => [
+      { value: '', label: 'All types' },
+      ...groups
+        .filter((g) => g.groupName)
+        .map((g) => ({ value: g.groupName, label: g.groupName })),
+    ],
+    [groups],
+  )
+
+  function handleDelete() {
+    toast.info('Delete is disabled to protect live ledger data')
   }
 
-  if (viewing) {
+  function openCustomer(row: Customer) {
+    navigate(`${listPath}/${customerSlug(row)}`, { state: { customer: row } })
+  }
+
+  if (slug) {
     return (
       <CustomerDetailsPage
-        customer={viewing}
-        onBack={() => setViewing(null)}
-        txPath={txPath}
+        slug={slug}
+        listPath={listPath}
+        onBack={() => navigate(listPath)}
       />
     )
   }
@@ -85,43 +222,57 @@ export function CustomersPage({ searchQuery = '', txPath }: Props) {
               Manage your all customers.
             </p>
           </div>
-          <div className="grid grid-cols-3 gap-2 lg:flex lg:shrink-0">
-            <DateFilter value={date} onChange={setDate} />
-            <SelectFilter
+          <div className="grid grid-cols-2 gap-2 overflow-visible lg:flex lg:shrink-0 lg:flex-wrap lg:justify-end">
+            <DateRangeFilter
+              from={dateFrom}
+              to={dateTo}
+              onFromChange={(next) => {
+                const range = applyDateRange('from', next, dateFrom, dateTo)
+                setDateFrom(range.from)
+                setDateTo(range.to)
+              }}
+              onToChange={(next) => {
+                const range = applyDateRange('to', next, dateFrom, dateTo)
+                setDateFrom(range.from)
+                setDateTo(range.to)
+              }}
+            />
+            <MenuFilter
               icon="status"
               value={status}
+              placeholder="Status"
+              ariaLabel="Filter by status"
               onChange={(v) => setStatus(v as CustomerStatus | '')}
               options={[
-                { value: '', label: 'Status' },
+                { value: '', label: 'All statuses' },
                 { value: 'Active', label: 'Active' },
                 { value: 'Inactive', label: 'Inactive' },
               ]}
             />
-            <SelectFilter
+            <MenuFilter
               icon="type"
               value={type}
-              onChange={(v) => setType(v as CustomerType | '')}
-              options={[
-                { value: '', label: 'Type' },
-                { value: 'Retail', label: 'Retail' },
-                { value: 'Wholesale', label: 'Wholesale' },
-                { value: 'Transport', label: 'Transport' },
-                { value: 'Corporate', label: 'Corporate' },
-              ]}
+              placeholder="Type"
+              ariaLabel="Filter by type"
+              onChange={setType}
+              options={typeOptions}
             />
           </div>
         </div>
 
-        {filtered.length === 0 ? (
+        {loading && rows.length === 0 ? (
+          <LoadingHint label="Loading customers…" />
+        ) : total === 0 ? (
           <p className="my-10 text-center text-sm font-semibold text-muted">No customers found.</p>
         ) : (
           <>
             <ul className="m-0 flex list-none flex-col gap-2.5 p-0 lg:hidden">
-              {pageRows.map((row) => (
+              {rows.map((row, index) => (
                 <li
-                  key={row.id}
+                  key={row.accid}
+                  ref={index % CUSTOMER_CHUNK === 4 ? afterFiveMobileRef : undefined}
                   className="cursor-pointer rounded-2xl border border-line bg-[#fafbfc] p-3.5 shadow-[0_4px_14px_rgba(26,29,33,0.04)]"
-                  onClick={() => setViewing(row)}
+                  onClick={() => openCustomer(row)}
                 >
                   <div className="flex items-start gap-3">
                     <div className="grid size-11 shrink-0 place-items-center rounded-full bg-white shadow-[0_4px_14px_rgba(26,29,33,0.1)] ring-1 ring-black/5">
@@ -132,12 +283,11 @@ export function CustomersPage({ searchQuery = '', txPath }: Props) {
                         <div className="min-w-0">
                           <p className="m-0 truncate text-[0.92rem] font-extrabold text-ink">{row.name}</p>
                         </div>
-                        <ActionButtons
-                          onView={() => setViewing(row)}
-                          onDelete={() => handleDelete(row)}
-                        />
+                        <ActionButtons onView={() => openCustomer(row)} onDelete={handleDelete} />
                       </div>
-                      <p className="mt-2 mb-0 text-[0.78rem] font-medium text-[#4b5563]">{row.phone}</p>
+                      <p className="mt-2 mb-0 text-[0.78rem] font-medium text-[#4b5563]">
+                        {displayText(row.phone)}
+                      </p>
                       <div className="mt-2.5 flex items-center justify-between gap-2">
                         <p
                           className={`m-0 text-[0.82rem] font-extrabold ${
@@ -152,6 +302,8 @@ export function CustomersPage({ searchQuery = '', txPath }: Props) {
                   </div>
                 </li>
               ))}
+              <div ref={mobileSentinelRef} className="h-4 shrink-0" />
+              {loadingMore ? <LoadingHint compact label="Loading more customers…" /> : null}
             </ul>
 
             <div className="-mx-1 hidden overflow-x-auto lg:block">
@@ -177,20 +329,21 @@ export function CustomersPage({ searchQuery = '', txPath }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {pageRows.map((row) => (
+                  {rows.map((row, index) => (
                     <tr
-                      key={row.id}
+                      key={row.accid}
+                      ref={index % CUSTOMER_CHUNK === 4 ? afterFiveDesktopRef : undefined}
                       className="cursor-pointer hover:bg-[#fcfcfd]"
-                      onClick={() => setViewing(row)}
+                      onClick={() => openCustomer(row)}
                     >
                       <td className="border-b border-[#f1f2f4] px-2.5 py-3.5 text-[0.84rem] font-semibold whitespace-nowrap text-ink">
                         {row.name}
                       </td>
                       <td className="border-b border-[#f1f2f4] px-2.5 py-3.5 text-[0.84rem] whitespace-nowrap text-[#374151]">
-                        {row.phone}
+                        {displayText(row.phone)}
                       </td>
                       <td className="border-b border-[#f1f2f4] px-2.5 py-3.5 text-[0.84rem] whitespace-nowrap text-[#374151]">
-                        {row.email}
+                        {displayText(row.email)}
                       </td>
                       <td
                         className={`border-b border-[#f1f2f4] px-2.5 py-3.5 text-[0.84rem] font-bold whitespace-nowrap ${
@@ -209,95 +362,23 @@ export function CustomersPage({ searchQuery = '', txPath }: Props) {
                         className="border-b border-[#f1f2f4] px-2.5 py-3.5 whitespace-nowrap"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <ActionButtons
-                          onView={() => setViewing(row)}
-                          onDelete={() => handleDelete(row)}
-                        />
+                        <ActionButtons onView={() => openCustomer(row)} onDelete={handleDelete} />
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              <div ref={desktopSentinelRef} className="h-4" />
+              {loadingMore ? <LoadingHint compact label="Loading more customers…" /> : null}
             </div>
 
-            <div className="mt-4 flex flex-col items-center gap-3 border-t border-line pt-4 sm:flex-row sm:justify-between">
-              <p className="m-0 text-[0.78rem] font-medium text-muted">
-                Showing {showingFrom} to {showingTo} of {filtered.length} customers
-              </p>
-              <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
-            </div>
+            <p className="mt-4 mb-0 border-t border-line pt-4 text-center text-[0.78rem] font-medium text-muted sm:text-left">
+              Showing {rows.length} of {total} customers
+            </p>
           </>
         )}
       </section>
     </>
-  )
-}
-
-function DateFilter({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <label className={`${filterBox} relative cursor-pointer`}>
-      <CalendarIcon />
-      <span className={`min-w-0 flex-1 truncate ${value ? 'text-ink' : 'text-muted'}`}>
-        {value ? formatFilterDate(value) : 'Date'}
-      </span>
-      {value ? (
-        <button
-          type="button"
-          className="relative z-10 grid size-5 place-items-center rounded-full border-0 bg-[#f3f4f6] text-muted hover:text-ink"
-          aria-label="Clear date"
-          onClick={(e) => {
-            e.preventDefault()
-            onChange('')
-          }}
-        >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-          </svg>
-        </button>
-      ) : (
-        <ChevronIcon />
-      )}
-      <input
-        type="date"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="absolute inset-0 cursor-pointer opacity-0"
-        aria-label="Filter by date"
-      />
-    </label>
-  )
-}
-
-function SelectFilter({
-  icon,
-  value,
-  onChange,
-  options,
-}: {
-  icon: 'status' | 'type'
-  value: string
-  onChange: (v: string) => void
-  options: { value: string; label: string }[]
-}) {
-  return (
-    <label className={`${filterBox} relative`}>
-      {icon === 'status' ? <StatusIcon /> : <TypeIcon />}
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={`min-w-0 flex-1 cursor-pointer appearance-none border-0 bg-transparent pr-1 outline-none ${
-          value ? 'text-ink' : 'text-muted'
-        }`}
-        aria-label={icon === 'status' ? 'Filter by status' : 'Filter by type'}
-      >
-        {options.map((opt) => (
-          <option key={opt.label} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-      <ChevronIcon />
-    </label>
   )
 }
 
@@ -349,110 +430,5 @@ function ActionButtons({ onView, onDelete }: { onView: () => void; onDelete: () 
         </svg>
       </button>
     </div>
-  )
-}
-
-function Pagination({
-  page,
-  totalPages,
-  onChange,
-}: {
-  page: number
-  totalPages: number
-  onChange: (p: number) => void
-}) {
-  const pages = Array.from({ length: totalPages }, (_, i) => i + 1)
-
-  return (
-    <div className="flex items-center gap-1">
-      <PageNav
-        label="Previous page"
-        disabled={page <= 1}
-        onClick={() => onChange(page - 1)}
-      >
-        <path d="M14 6 8 12l6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      </PageNav>
-      {pages.map((n) => (
-        <button
-          key={n}
-          type="button"
-          onClick={() => onChange(n)}
-          className={`grid size-8 place-items-center rounded-lg border-0 text-[0.8rem] font-bold ${
-            n === page
-              ? 'bg-fuel text-ink shadow-[0_4px_10px_rgba(245,197,24,0.35)]'
-              : 'bg-transparent text-[#4b5563] hover:bg-[#f4f5f7]'
-          }`}
-        >
-          {n}
-        </button>
-      ))}
-      <PageNav
-        label="Next page"
-        disabled={page >= totalPages}
-        onClick={() => onChange(page + 1)}
-      >
-        <path d="m10 6 6 6-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      </PageNav>
-    </div>
-  )
-}
-
-function PageNav({
-  label,
-  disabled,
-  onClick,
-  children,
-}: {
-  label: string
-  disabled: boolean
-  onClick: () => void
-  children: ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      disabled={disabled}
-      onClick={onClick}
-      className="grid size-8 place-items-center rounded-lg border-0 bg-transparent text-[#4b5563] hover:bg-[#f4f5f7] disabled:cursor-not-allowed disabled:opacity-35"
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        {children}
-      </svg>
-    </button>
-  )
-}
-
-function CalendarIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="shrink-0 text-muted" aria-hidden="true">
-      <rect x="3.5" y="5" width="17" height="15.5" rx="2" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M8 3.5V7M16 3.5V7M3.5 10h17" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function StatusIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="shrink-0 text-muted" aria-hidden="true">
-      <circle cx="12" cy="12" r="8.2" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M8.2 12.2 11 15l4.8-6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function TypeIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="shrink-0 text-muted" aria-hidden="true">
-      <path d="M4 7h16M4 12h10M4 17h7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function ChevronIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="shrink-0 text-muted" aria-hidden="true">
-      <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
   )
 }

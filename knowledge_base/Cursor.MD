@@ -116,13 +116,27 @@ npm run dev -- --host 0.0.0.0 --port 5174
 - Settings remains removed (`showSection = active !== 'dashboard'`, `isCustomers = active === 'customers'`).
 - Staged resolution; merge commit still needed by user if not committed yet.
 
-## Customer Details page (2026-08-26)
-- `src/dashboard/CustomerDetailsPage.tsx` — mobile + desktop dummy UI
-- Opens when clicking a customer row/card or view icon from `CustomersPage`
-- **No** +Credit / +Debit buttons (mobile or desktop)
-- Desktop: breadcrumbs + **Back to Customers** only
-- Customer Information + Summary use **icon cards** (name, phone, email, address, balances, notes, account since; credit/debit/tx summary)
-- Detail extras via `getCustomerDetail()` in `customers.ts` (dummy CNIC/address/notes/txs)
+## Customer Details page (2026-08-26, live)
+
+- `src/dashboard/CustomerDetailsPage.tsx` — mobile + desktop, **live AccReg/Leger**
+- Opens at `/customers/{slug}` (or `/accountant/customers/{slug}`) — slug is `kebab-name-accid`, data loaded via `GET /api/customers/slug/:slug`
+- **No** +Credit / +Debit buttons; **View All Transactions removed**
+- Fields: AccNo (Customer ID), NIC (CNIC), Opening (ledger before today), Closing (full SUM Debit-Credit), name/phone/email/address/notes/Dated
+- Summary: SUM(Credit), SUM(Debit), COUNT(Trid) — credit is 0 when Leger.Credit is 0 in DB
+- History table uses `table-fixed`; long Product/Service wraps (2 lines); amounts stack PKR so columns stay inside the card.
+- History date filter is **From – To** range (`dateFrom`/`dateTo` query params, inclusive). Empty range = all dates. Tab switch clears the range.
+- Shared `src/dashboard/filters.tsx`: DateRangeFilter + MenuFilter. Entire control is clickable (`showPicker` / custom list). Customers list Status/Type use the styled menu; list date is From–To on `AccReg.Dated`.
+- Dashboard prefetch: login + every visit to dashboard starts background fetch of customers (40) + groups + transactions page data (`pageCache.ts`). Customers list shows 15, then +15 after scrolling ~5 rows (API batch 40). LoadingHint spinner with text.
+
+## Backend inventory (2026-08-26, updated)
+
+- **Only backend:** `app-enhancement/server/` — Express 5 + `mssql` (tedious). No Nest/Prisma.
+- **Routes:** health, auth login/logout/me, **customers list/groups/slug/:slug/:accid/:accid/transactions**
+- **SQL:** parameterized SELECT on `UserReg`, `AccReg`, `Leger`, `GroupReg` — never INSERT/UPDATE/DELETE
+- **Auth:** JWT HS256 (`fl_token` + Bearer) + `requireRoles(Administrator, Accountant)` on customer routes + `X-FuelLedger-Key` (`API_READ_KEY`) + 60/min rate limit
+- **DB env:** `server/.env` — `DB_*`, `JWT_*`, `API_READ_KEY`
+- **FE:** `src/lib/api.ts` sends Bearer + key; `customers.ts` is live helpers (mock array removed)
+- **Balance:** `ISNULL(OpBal,0) + SUM(Debit) - SUM(Credit)`; history running balance via window on Trid; include Posted + NULL ledger rows
 
 ## Agent notes
 - Multiple agents: read this file before work; update after meaningful changes.

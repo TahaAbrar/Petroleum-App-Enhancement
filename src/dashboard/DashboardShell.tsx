@@ -10,6 +10,7 @@ import { DashboardHome, SectionPlaceholder } from './DashboardHome'
 import { TransactionsPage } from './TransactionsPage'
 import { CreditPage } from './CreditPage'
 import { DebitPage } from './DebitPage'
+import { clearPageCache, prefetchDashboardPages } from './pageCache'
 
 type Props = {
   config: DashboardConfig
@@ -27,7 +28,16 @@ export function DashboardShell({ config }: Props) {
   const profileMenuRef = useRef<HTMLDivElement>(null)
 
   const { nav, bottomNav, homePath, txPath, portalTitle, roleLabel } = config
-  const active = nav.find((item) => item.path === location.pathname)?.id ?? 'dashboard'
+  const customersNav = nav.find((item) => item.id === 'customers')
+  const active =
+    nav.find((item) => {
+      if (item.id === 'customers') {
+        return (
+          location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
+        )
+      }
+      return item.path === location.pathname
+    })?.id ?? 'dashboard'
   const activeLabel = nav.find((n) => n.id === active)?.label || 'Dashboard'
   const activePath = nav.find((n) => n.id === active)?.path || homePath
   const displayName = session?.user?.username || 'User'
@@ -64,6 +74,11 @@ export function DashboardShell({ config }: Props) {
   }, [location.pathname])
 
   useEffect(() => {
+    if (active !== 'dashboard') return
+    prefetchDashboardPages()
+  }, [active])
+
+  useEffect(() => {
     if (!logoutConfirmOpen) return
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape' && !loggingOut) setLogoutConfirmOpen(false)
@@ -77,6 +92,7 @@ export function DashboardShell({ config }: Props) {
     setLoggingOut(true)
     try {
       await apiLogout()
+      clearPageCache()
       setLogoutConfirmOpen(false)
       toast.info('You have been logged out.')
       navigate('/login', { replace: true })
@@ -347,7 +363,10 @@ export function DashboardShell({ config }: Props) {
                 ? location.pathname === homePath
                 : item.id === 'more'
                   ? moreActive
-                  : location.pathname === item.path
+                  : item.id === 'customers' && customersNav
+                    ? location.pathname === customersNav.path ||
+                      location.pathname.startsWith(`${customersNav.path}/`)
+                    : location.pathname === item.path
 
             return (
               <button

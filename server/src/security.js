@@ -88,3 +88,10 @@ export function signToken(payload) {
 export function verifyToken(token) {
   return jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] })
 }
+
+/** Timing-safe compare for API_READ_KEY (length-independent via SHA-256). */
+export function safeEqualKey(sent, expected) {
+  const a = crypto.createHash('sha256').update(String(sent ?? ''), 'utf8').digest()
+  const b = crypto.createHash('sha256').update(String(expected ?? ''), 'utf8').digest()
+  return crypto.timingSafeEqual(a, b)
+}

@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FuelLedgerLogo } from '../components/FuelLedgerLogo'
 import { apiLogin, setSession } from '../lib/auth'
+import { prefetchDashboardPages } from '../dashboard/pageCache'
 import { toast } from '../toast'
 
 type Phase = 'intro' | 'exit' | 'login'
@@ -108,6 +109,7 @@ export default function LoginPage() {
         user: data.user,
         redirectTo: data.redirectTo,
       })
+      prefetchDashboardPages()
       if (!remember) {
         // sessionStorage already; remember only affects session duration UX for now
       }

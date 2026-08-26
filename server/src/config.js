@@ -42,4 +42,5 @@ export const env = {
     .map((s) => s.trim())
     .filter(Boolean),
   cookieSecure: String(process.env.COOKIE_SECURE || 'false') === 'true',
+  apiReadKey: required('API_READ_KEY'),
 }

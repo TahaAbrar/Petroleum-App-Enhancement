@@ -6,7 +6,8 @@ import rateLimit from 'express-rate-limit'
 import { env } from './config.js'
 import { getPool } from './db.js'
 import { loginHandler, logoutHandler, meHandler } from './authRoutes.js'
-import { requireAuth } from './middleware.js'
+import { requireAuth, requireReadKey, requireRoles } from './middleware.js'
+import { customerRouter } from './customerRoutes.js'
 
 const app = express()
 
@@ -48,6 +49,26 @@ app.post('/api/auth/login', loginLimiter, loginHandler)
 app.post('/api/auth/logout', logoutHandler)
 app.get('/api/auth/me', requireAuth, meHandler)
 
+const customerLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    ok: false,
+    message: 'Too many customer requests. Please wait and try again.',
+  },
+})
+
+app.use(
+  '/api/customers',
+  customerLimiter,
+  requireReadKey,
+  requireAuth,
+  requireRoles('Administrator', 'Accountant'),
+  customerRouter,
+)
+
 app.all(/^\/api\/.*/, (_req, res) => {
   res.status(404).json({ ok: false, message: 'Not found' })
 })
@@ -63,7 +84,7 @@ app.use((err, _req, res, _next) => {
 async function start() {
   await getPool()
   app.listen(env.port, () => {
-    console.log(`[fuelledger-api] listening on :${env.port} (UserReg SELECT-only auth)`)
+    console.log(`[fuelledger-api] listening on :${env.port} (SELECT-only auth + customers)`)
   })
 }
 

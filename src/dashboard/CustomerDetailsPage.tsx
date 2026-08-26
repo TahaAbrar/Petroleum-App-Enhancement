@@ -1,37 +1,259 @@
-import { useMemo, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { toast } from '../toast'
 import {
+  displayText,
+  fetchCustomerBySlug,
+  fetchCustomerTransactions,
   formatFilterDate,
   formatPkr,
-  getCustomerDetail,
   type Customer,
+  type CustomerDetail,
+  type CustomerTransaction,
   type CustomerTxType,
+  type HistoryKind,
+  type HistorySort,
 } from './customers'
 import { CustomerMark } from './icons'
+import { applyDateRange, DateRangeFilter } from './filters'
+import { LoadingHint } from './loading'
 import { panel } from './styles'
 
 type Props = {
-  customer: Customer
+  slug: string
+  listPath: string
   onBack: () => void
-  txPath: string
 }
 
-type HistoryTab = 'all' | 'credit' | 'debit'
+const PAGE = 15
+const PREFETCH = 50
 
-export function CustomerDetailsPage({ customer, onBack, txPath }: Props) {
+function useHistory(
+  accid: number | null,
+  kind: HistoryKind,
+  dateFrom: string,
+  dateTo: string,
+  sort: HistorySort,
+) {
+  const [fetched, setFetched] = useState<CustomerTransaction[]>([])
+  const [total, setTotal] = useState(0)
+  const [visible, setVisible] = useState(PAGE)
+  const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const inflight = useRef(false)
+  const fetchedRef = useRef<CustomerTransaction[]>([])
+  const totalRef = useRef(0)
+  const gen = useRef(0)
+
+  useEffect(() => {
+    fetchedRef.current = fetched
+  }, [fetched])
+  useEffect(() => {
+    totalRef.current = total
+  }, [total])
+
+  useEffect(() => {
+    if (!accid) {
+      setFetched([])
+      setTotal(0)
+      setLoading(false)
+      return
+    }
+    const id = ++gen.current
+    const ac = new AbortController()
+    inflight.current = true
+    setLoading(true)
+    setFetched([])
+    setVisible(PAGE)
+    setTotal(0)
+    fetchCustomerTransactions(
+      accid,
+      {
+        kind,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+        sort,
+        offset: 0,
+        limit: PAGE,
+      },
+      ac.signal,
+    )
+      .then((data) => {
+        if (id !== gen.current) return
+        setFetched(data.transactions)
+        setTotal(data.total)
+        setVisible(Math.min(PAGE, data.total))
+      })
+      .catch((err) => {
+        if (ac.signal.aborted || id !== gen.current) return
+        setFetched([])
+        setTotal(0)
+        toast.error(err instanceof Error ? err.message : 'Could not load transactions')
+      })
+      .finally(() => {
+        if (id === gen.current) {
+          inflight.current = false
+          setLoading(false)
+        }
+      })
+    return () => {
+      ac.abort()
+      inflight.current = false
+    }
+  }, [accid, kind, dateFrom, dateTo, sort])
+
+  const loadFromServer = useCallback(
+    async (limit: number) => {
+      if (!accid || inflight.current) return
+      const offset = fetchedRef.current.length
+      if (offset >= totalRef.current) return
+      inflight.current = true
+      setLoadingMore(true)
+      try {
+        const data = await fetchCustomerTransactions(accid, {
+          kind,
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
+          sort,
+          offset,
+          limit: Math.min(limit, 50),
+        })
+        setTotal(data.total)
+        setFetched((prev) => {
+          const seen = new Set(prev.map((row) => row.trid))
+          return [...prev, ...data.transactions.filter((row) => !seen.has(row.trid))]
+        })
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Could not load more transactions')
+      } finally {
+        inflight.current = false
+        setLoadingMore(false)
+      }
+    },
+    [accid, kind, dateFrom, dateTo, sort],
+  )
+
+  const revealMore = useCallback(() => {
+    if (visible >= totalRef.current) return
+    const next = visible + PAGE
+    if (fetchedRef.current.length < Math.min(next, totalRef.current)) {
+      void loadFromServer(PREFETCH)
+    }
+    setVisible((v) => Math.min(v + PAGE, totalRef.current || v + PAGE))
+  }, [visible, loadFromServer])
+
+  const prefetch = useCallback(() => {
+    if (fetchedRef.current.length >= totalRef.current) return
+    void loadFromServer(PREFETCH)
+  }, [loadFromServer])
+
+  useEffect(() => {
+    if (loading) return
+    void loadFromServer(PREFETCH)
+  }, [loading, loadFromServer])
+
+  return {
+    rows: fetched.slice(0, Math.min(visible, fetched.length)),
+    total,
+    loading,
+    loadingMore,
+    hasMore: visible < total,
+    emptyRange: Boolean(dateFrom || dateTo) && !loading && total === 0,
+    revealMore,
+    prefetch,
+  }
+}
+
+export function CustomerDetailsPage({ slug, listPath, onBack }: Props) {
   const navigate = useNavigate()
-  const detail = useMemo(() => getCustomerDetail(customer), [customer])
-  const [tab, setTab] = useState<HistoryTab>('all')
+  const location = useLocation()
+  const preview = (location.state as { customer?: Customer } | null)?.customer
+  const [detail, setDetail] = useState<CustomerDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(true)
+  const [tab, setTab] = useState<HistoryKind>('all')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [sort, setSort] = useState<HistorySort>('recent')
+  const history = useHistory(detail?.accid ?? null, tab, dateFrom, dateTo, sort)
+  const afterFiveMobileRef = useRef<HTMLLIElement | null>(null)
+  const afterFiveDesktopRef = useRef<HTMLTableRowElement | null>(null)
+  const mobileSentinelRef = useRef<HTMLDivElement | null>(null)
+  const desktopSentinelRef = useRef<HTMLDivElement | null>(null)
 
-  const rows = useMemo(() => {
-    if (tab === 'credit') return detail.transactions.filter((t) => t.type === 'Credit')
-    if (tab === 'debit') return detail.transactions.filter((t) => t.type === 'Debit')
-    return detail.transactions
-  }, [detail.transactions, tab])
+  useEffect(() => {
+    const ac = new AbortController()
+    setDetailLoading(true)
+    fetchCustomerBySlug(slug, ac.signal)
+      .then((customer) => {
+        setDetail(customer)
+        if (customer.slug && customer.slug !== slug) {
+          navigate(`${listPath}/${customer.slug}`, { replace: true, state: location.state })
+        }
+      })
+      .catch((err) => {
+        if (ac.signal.aborted) return
+        toast.error(err instanceof Error ? err.message : 'Could not load customer details')
+        navigate(listPath)
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setDetailLoading(false)
+      })
+    return () => ac.abort()
+  }, [slug, listPath, navigate, location.state])
+
+  useEffect(() => {
+    const observers: IntersectionObserver[] = []
+    const watch = (target: Element | null) => {
+      if (!target) return
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((e) => e.isIntersecting)) history.revealMore()
+        },
+        { root: null, rootMargin: '160px 0px', threshold: 0.01 },
+      )
+      observer.observe(target)
+      observers.push(observer)
+    }
+    watch(afterFiveMobileRef.current)
+    watch(afterFiveDesktopRef.current)
+    watch(mobileSentinelRef.current)
+    watch(desktopSentinelRef.current)
+    return () => observers.forEach((o) => o.disconnect())
+  }, [history.revealMore, history.hasMore, tab, history.rows.length])
+
+  const view: CustomerDetail = detail ?? {
+    accid: preview?.accid ?? 0,
+    id: preview?.id ?? '—',
+    slug: preview?.slug ?? slug,
+    name: preview?.name ?? 'Loading…',
+    phone: preview?.phone ?? '',
+    email: preview?.email ?? '',
+    cnic: preview?.cnic ?? '',
+    address: preview?.address ?? '',
+    notes: preview?.notes ?? '',
+    currentBalance: preview?.currentBalance ?? 0,
+    openingBalance: preview?.openingBalance ?? 0,
+    status: preview?.status ?? 'Active',
+    type: preview?.type ?? '',
+    createdAt: preview?.createdAt ?? '',
+    totalCredit: 0,
+    totalDebit: 0,
+    transactionCount: 0,
+  }
+
+  function handleTab(next: HistoryKind) {
+    if (next === tab) return
+    setDateFrom('')
+    setDateTo('')
+    setTab(next)
+  }
+
+  const emptyMessage = history.emptyRange
+    ? 'No transactions in this date range'
+    : 'No records found.'
 
   return (
     <div className="flex flex-col gap-3.5 lg:gap-4">
-      {/* Mobile header */}
       <div className="flex items-center gap-2 lg:hidden">
         <button
           type="button"
@@ -46,7 +268,6 @@ export function CustomerDetailsPage({ customer, onBack, txPath }: Props) {
         </h1>
       </div>
 
-      {/* Desktop header */}
       <div className="hidden items-center justify-between gap-3 lg:flex">
         <p className="m-0 text-[0.82rem] font-medium text-muted">
           <button
@@ -69,7 +290,6 @@ export function CustomerDetailsPage({ customer, onBack, txPath }: Props) {
         </button>
       </div>
 
-      {/* Profile + balances */}
       <section className={`${panel} rounded-2xl p-4 lg:p-5`} aria-label="Customer profile">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-3.5 lg:items-center">
@@ -79,13 +299,13 @@ export function CustomerDetailsPage({ customer, onBack, txPath }: Props) {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="m-0 text-[1.15rem] font-extrabold tracking-[-0.02em] text-ink lg:text-[1.35rem]">
-                  {detail.name}
+                  {view.name}
                 </h2>
-                <StatusPill status={detail.status} />
+                <StatusPill status={view.status} />
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
-                <IdChip label="Customer ID" value={detail.id} accent />
-                <IdChip label="CNIC" value={detail.cnic} />
+                <IdChip label="Customer ID" value={displayText(view.id)} accent />
+                <IdChip label="CNIC" value={displayText(view.cnic)} />
               </div>
             </div>
           </div>
@@ -93,83 +313,93 @@ export function CustomerDetailsPage({ customer, onBack, txPath }: Props) {
           <div className="hidden gap-3 lg:flex">
             <BalanceChip
               label="Opening Balance"
-              value={formatPkr(detail.openingBalance)}
+              value={formatPkr(view.openingBalance)}
               icon="wallet"
               tone="muted"
             />
             <BalanceChip
-              label="Current Balance"
-              value={formatPkr(detail.currentBalance)}
+              label="Closing Balance"
+              value={formatPkr(view.currentBalance)}
               icon="wallet"
-              tone={detail.currentBalance < 0 ? 'debit' : 'credit'}
+              tone={view.currentBalance < 0 ? 'debit' : 'credit'}
             />
           </div>
         </div>
       </section>
 
-      {/* Mobile balance cards */}
       <div className="flex flex-col gap-2.5 lg:hidden">
         <BalanceCard
           label="Opening Balance"
-          value={formatPkr(detail.openingBalance)}
+          value={formatPkr(view.openingBalance)}
           valueClass="text-ink"
           iconTone="fuel"
         />
         <BalanceCard
-          label="Current Balance"
-          value={formatPkr(detail.currentBalance)}
-          valueClass={detail.currentBalance < 0 ? 'text-debit' : 'text-credit'}
+          label="Closing Balance"
+          value={formatPkr(view.currentBalance)}
+          valueClass={view.currentBalance < 0 ? 'text-debit' : 'text-credit'}
           iconTone="amber"
         />
         <div className="grid grid-cols-3 gap-2">
-          <MiniStat label="Total Credit" value={compactPkr(detail.totalCredit)} tone="credit" />
-          <MiniStat label="Total Debit" value={compactPkr(detail.totalDebit)} tone="debit" />
-          <MiniStat label="Transactions" value={String(detail.transactionCount)} tone="blue" />
+          <MiniStat
+            label="Total Credit"
+            value={detailLoading ? '…' : compactPkr(view.totalCredit)}
+            tone="credit"
+          />
+          <MiniStat
+            label="Total Debit"
+            value={detailLoading ? '…' : compactPkr(view.totalDebit)}
+            tone="debit"
+          />
+          <MiniStat
+            label="Transactions"
+            value={detailLoading ? '…' : String(view.transactionCount)}
+            tone="blue"
+          />
         </div>
       </div>
 
-      {/* Customer information + summary — icon cards */}
       <div className="grid gap-3.5 lg:grid-cols-[1fr_250px] lg:gap-4">
         <section className={`${panel} rounded-2xl p-4 lg:p-5`} aria-label="Customer information">
           <h3 className="mb-3 mt-0 text-[1rem] font-extrabold text-ink lg:mb-4">
             Customer Information
           </h3>
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-            <InfoIconCard icon="user" iconTone="fuel" label="Customer Name" value={detail.name} />
-            <InfoIconCard icon="phone" iconTone="sky" label="Phone" value={detail.phone} />
-            <InfoIconCard icon="email" iconTone="credit" label="Email" value={detail.email} />
+            <InfoIconCard icon="user" iconTone="fuel" label="Customer Name" value={view.name} />
+            <InfoIconCard icon="phone" iconTone="sky" label="Phone" value={displayText(view.phone)} />
+            <InfoIconCard icon="email" iconTone="credit" label="Email" value={displayText(view.email)} />
             <InfoIconCard
               icon="pin"
               iconTone="amber"
               label="Address"
-              value={detail.address}
+              value={displayText(view.address)}
               className="sm:col-span-2 xl:col-span-2"
             />
             <InfoIconCard
               icon="clipboard"
               iconTone="orange"
               label="Opening Balance"
-              value={formatPkr(detail.openingBalance)}
+              value={formatPkr(view.openingBalance)}
             />
             <InfoIconCard
               icon="down"
               iconTone="credit"
-              label="Current Balance"
-              value={formatPkr(detail.currentBalance)}
-              valueTone={detail.currentBalance < 0 ? 'debit' : 'credit'}
+              label="Closing Balance"
+              value={formatPkr(view.currentBalance)}
+              valueTone={view.currentBalance < 0 ? 'debit' : 'credit'}
             />
             <InfoIconCard
               icon="note"
               iconTone="fuel"
               label="Notes"
-              value={detail.notes}
+              value={displayText(view.notes)}
               className="sm:col-span-2 xl:col-span-2"
             />
             <InfoIconCard
               icon="calendar"
               iconTone="sky"
               label="Account Since"
-              value={formatFilterDate(detail.createdAt)}
+              value={formatFilterDate(view.createdAt)}
             />
           </div>
         </section>
@@ -179,19 +409,19 @@ export function CustomerDetailsPage({ customer, onBack, txPath }: Props) {
           <div className="flex flex-col gap-2.5">
             <SummaryCard
               label="Total Credit"
-              value={formatPkr(detail.totalCredit)}
+              value={detailLoading ? '…' : formatPkr(view.totalCredit)}
               tone="credit"
               icon="down"
             />
             <SummaryCard
               label="Total Debit"
-              value={formatPkr(detail.totalDebit)}
+              value={detailLoading ? '…' : formatPkr(view.totalDebit)}
               tone="debit"
               icon="up"
             />
             <SummaryCard
               label="Transactions"
-              value={String(detail.transactionCount)}
+              value={detailLoading ? '…' : String(view.transactionCount)}
               tone="blue"
               icon="doc"
             />
@@ -199,36 +429,84 @@ export function CustomerDetailsPage({ customer, onBack, txPath }: Props) {
         </aside>
       </div>
 
-      {/* Transaction history */}
-      <section className={`${panel} rounded-2xl p-4 lg:p-5`} aria-label="Transaction history">
-        <div className="mb-3 flex flex-wrap items-center gap-1 border-b border-line pb-0">
-          {(
-            [
-              ['all', 'Transaction History'],
-              ['credit', 'Credit History'],
-              ['debit', 'Debit History'],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              className={`cursor-pointer border-0 border-b-2 bg-transparent px-3 py-2.5 text-[0.8rem] font-bold transition ${
-                tab === id
-                  ? 'border-fuel text-ink'
-                  : 'border-transparent text-muted hover:text-ink'
-              }`}
+      <section
+        className={`${panel} rounded-2xl p-4 lg:p-5`}
+        aria-label="Transaction history"
+        tabIndex={0}
+        onFocus={history.prefetch}
+        onPointerEnter={history.prefetch}
+      >
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-1 border-b border-line sm:border-0">
+            {(
+              [
+                ['all', 'Transaction History'],
+                ['credit', 'Credit History'],
+                ['debit', 'Debit History'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => handleTab(id)}
+                className={`cursor-pointer border-0 bg-transparent px-3 py-2.5 text-[0.8rem] font-bold transition ${
+                  tab === id
+                    ? 'border-b-2 border-fuel text-ink'
+                    : 'border-b-2 border-transparent text-muted hover:text-ink'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <DateRangeFilter
+              variant="pill"
+              grouped
+              from={dateFrom}
+              to={dateTo}
+              onFromChange={(next) => {
+                const range = applyDateRange('from', next, dateFrom, dateTo)
+                setDateFrom(range.from)
+                setDateTo(range.to)
+              }}
+              onToChange={(next) => {
+                const range = applyDateRange('to', next, dateFrom, dateTo)
+                setDateFrom(range.from)
+                setDateTo(range.to)
+              }}
+            />
+            <div
+              className="inline-flex rounded-full border border-line bg-[#f4f5f7] p-0.5"
+              role="group"
+              aria-label="Sort transactions"
             >
-              {label}
-            </button>
-          ))}
+              {(
+                [
+                  ['recent', 'Recent'],
+                  ['oldest', 'Oldest'],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setSort(id)}
+                  className={`cursor-pointer rounded-full border-0 px-3 py-1.5 text-[0.72rem] font-bold ${
+                    sort === id ? 'bg-white text-ink shadow-sm' : 'bg-transparent text-muted'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* Mobile tx list */}
         <ul className="m-0 flex list-none flex-col p-0 lg:hidden">
-          {rows.map((row) => (
+          {history.rows.map((row, index) => (
             <li
-              key={row.id}
+              key={row.trid}
+              ref={index === 4 ? afterFiveMobileRef : undefined}
               className="flex items-center justify-between gap-3 border-b border-[#ECEEF2] py-3 last:border-b-0"
             >
               <div className="min-w-0">
@@ -250,14 +528,35 @@ export function CustomerDetailsPage({ customer, onBack, txPath }: Props) {
               </div>
             </li>
           ))}
-          {rows.length === 0 && (
-            <li className="py-8 text-center text-sm font-medium text-muted">No records found.</li>
+          {history.loading && (
+            <li>
+              <LoadingHint label="Loading transactions…" />
+            </li>
+          )}
+          {!history.loading && history.rows.length === 0 && (
+            <li className="py-8 text-center text-sm font-medium text-muted">{emptyMessage}</li>
+          )}
+          <div ref={mobileSentinelRef} className="h-4 shrink-0" />
+          {history.loadingMore && (
+            <li>
+              <LoadingHint compact label="Loading more…" />
+            </li>
           )}
         </ul>
 
-        {/* Desktop table */}
-        <div className="-mx-1 hidden overflow-x-auto lg:block">
-          <table className="w-full min-w-[920px] border-collapse">
+        <div className="hidden min-w-0 lg:block">
+          <table className="w-full table-fixed border-collapse">
+            <colgroup>
+              <col className="w-[9%]" />
+              <col className="w-[13%]" />
+              <col className="w-[7%]" />
+              <col className="w-[20%]" />
+              <col className="w-[7%]" />
+              <col className="w-[7%]" />
+              <col className="w-[12%]" />
+              <col className="w-[12%]" />
+              <col className="w-[13%]" />
+            </colgroup>
             <thead>
               <tr>
                 {[
@@ -273,7 +572,7 @@ export function CustomerDetailsPage({ customer, onBack, txPath }: Props) {
                 ].map((h) => (
                   <th
                     key={h}
-                    className="border-b border-line px-2.5 py-3 text-left text-[0.72rem] font-bold tracking-[0.04em] text-muted uppercase whitespace-nowrap"
+                    className="border-b border-line px-2 py-3 text-left text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase"
                   >
                     {h}
                   </th>
@@ -281,42 +580,63 @@ export function CustomerDetailsPage({ customer, onBack, txPath }: Props) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} className="hover:bg-[#fcfcfd]">
-                  <Td className="font-semibold text-ink">{row.id}</Td>
-                  <Td>{row.when}</Td>
+              {history.rows.map((row, index) => (
+                <tr
+                  key={row.trid}
+                  ref={index === 4 ? afterFiveDesktopRef : undefined}
+                  className="hover:bg-[#fcfcfd]"
+                >
+                  <Td className="font-semibold text-ink">
+                    <span className="block truncate" title={row.id}>
+                      {row.id}
+                    </span>
+                  </Td>
+                  <Td>
+                    <WhenCell value={row.when} />
+                  </Td>
                   <Td>
                     <TypeBadge type={row.type} />
                   </Td>
-                  <Td>{row.product}</Td>
-                  <Td>{row.quantity}</Td>
-                  <Td>{row.rate}</Td>
-                  <Td className={row.type === 'Credit' ? 'font-bold text-credit' : 'font-bold text-debit'}>
-                    {formatPkr(row.amount)}
+                  <Td className="min-w-0">
+                    <span className="line-clamp-2 break-words" title={row.product}>
+                      {row.product}
+                    </span>
                   </Td>
-                  <Td>{formatPkr(row.balance)}</Td>
-                  <Td>{row.by}</Td>
+                  <Td>
+                    <span className="block break-words">{row.quantity}</span>
+                  </Td>
+                  <Td>
+                    <span className="block break-words">{row.rate}</span>
+                  </Td>
+                  <Td className={row.type === 'Credit' ? 'font-bold text-credit' : 'font-bold text-debit'}>
+                    <PkrCell value={row.amount} />
+                  </Td>
+                  <Td className="font-bold">
+                    <PkrCell value={row.balance} />
+                  </Td>
+                  <Td>
+                    <span className="block break-words leading-snug">{row.by}</span>
+                  </Td>
                 </tr>
               ))}
-              {rows.length === 0 && (
+              {history.loading && (
+                <tr>
+                  <td colSpan={9}>
+                    <LoadingHint label="Loading transactions…" />
+                  </td>
+                </tr>
+              )}
+              {!history.loading && history.rows.length === 0 && (
                 <tr>
                   <td colSpan={9} className="py-10 text-center text-sm font-medium text-muted">
-                    No records found.
+                    {emptyMessage}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-        </div>
-
-        <div className="mt-4 flex justify-center">
-          <button
-            type="button"
-            onClick={() => navigate(txPath)}
-            className="cursor-pointer border-0 bg-transparent text-[0.85rem] font-bold text-[#c99700] hover:text-ink"
-          >
-            View All Transactions
-          </button>
+          <div ref={desktopSentinelRef} className="h-4" />
+          {history.loadingMore && <LoadingHint compact label="Loading more…" />}
         </div>
       </section>
     </div>
@@ -343,7 +663,7 @@ function StatusPill({ status }: { status: Customer['status'] }) {
 function TypeBadge({ type }: { type: CustomerTxType }) {
   return (
     <span
-      className={`inline-flex rounded-full px-2.5 py-1 text-[0.68rem] font-bold ${
+      className={`inline-flex rounded-full px-2 py-0.5 text-[0.65rem] font-bold ${
         type === 'Credit' ? 'bg-credit-bg text-credit' : 'bg-debit-bg text-debit'
       }`}
     >
@@ -526,10 +846,37 @@ function SummaryCard({
   )
 }
 
+function WhenCell({ value }: { value: string }) {
+  const match = value.match(/^(.+?)\s+(\d{1,2}:\d{2}\s*[AP]M)$/i)
+  if (!match) {
+    return <span className="block leading-snug break-words">{value}</span>
+  }
+  return (
+    <span className="block leading-snug">
+      <span className="block">{match[1]}</span>
+      <span className="block text-[0.7rem] font-medium text-muted">{match[2]}</span>
+    </span>
+  )
+}
+
+function PkrCell({ value }: { value: number }) {
+  const formatted = Math.abs(value).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return (
+    <span className="block leading-tight tabular-nums">
+      {value < 0 ? '-' : ''}
+      {formatted}
+      <span className="mt-0.5 block text-[0.62rem] font-semibold tracking-wide text-muted">PKR</span>
+    </span>
+  )
+}
+
 function Td({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
     <td
-      className={`border-b border-[#f1f2f4] px-2.5 py-3.5 text-[0.84rem] whitespace-nowrap text-[#374151] ${className}`}
+      className={`border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151] ${className}`}
     >
       {children}
     </td>
@@ -662,4 +1009,3 @@ function SideIcon({ name }: { name: 'down' | 'up' | 'doc' }) {
     </svg>
   )
 }
-
