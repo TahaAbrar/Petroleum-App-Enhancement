@@ -7,7 +7,6 @@ const NAV_BASE: NavItem[] = [
   { id: 'debit', label: 'Debit', icon: 'debit', path: '/debit' },
   { id: 'transactions', label: 'Transactions', icon: 'swap', path: '/transactions' },
   { id: 'reports', label: 'Reports', icon: 'doc', path: '/reports' },
-  { id: 'settings', label: 'Settings', icon: 'gear', path: '/settings' },
 ]
 
 const BOTTOM_BASE = [
@@ -15,7 +14,7 @@ const BOTTOM_BASE = [
   { id: 'customers', label: 'Customers', path: '/customers', icon: 'users' },
   { id: 'fab', label: 'Add', path: '/credit', icon: 'plus' },
   { id: 'transactions', label: 'Txns', path: '/transactions', icon: 'swap' },
-  { id: 'more', label: 'More', path: '/settings', icon: 'more' },
+  { id: 'more', label: 'More', path: '/reports', icon: 'more' },
 ] as const
 
 function withPrefix(path: string, prefix: string) {
@@ -55,7 +54,7 @@ export function buildBottomNav(role: PortalRole): BottomNavItem[] {
       item.id === 'home'
         ? withPrefix('/dashboard', prefix)
         : item.id === 'more'
-          ? withPrefix('/settings', prefix)
+          ? withPrefix('/reports', prefix)
           : withPrefix(item.path, prefix),
   })).filter((item) => {
     if (role === 'User' && (item.id === 'customers' || item.id === 'fab')) return false

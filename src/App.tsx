@@ -22,7 +22,6 @@ export default function App() {
           <Route path="/debit" element={<Dashboard />} />
           <Route path="/transactions" element={<Dashboard />} />
           <Route path="/reports" element={<Dashboard />} />
-          <Route path="/settings" element={<Dashboard />} />
         </Route>
 
         <Route element={<RoleRoute allow={['Accountant']} />}>
@@ -32,14 +31,12 @@ export default function App() {
           <Route path="/accountant/debit" element={<AccountantDashboard />} />
           <Route path="/accountant/transactions" element={<AccountantDashboard />} />
           <Route path="/accountant/reports" element={<AccountantDashboard />} />
-          <Route path="/accountant/settings" element={<AccountantDashboard />} />
         </Route>
 
         <Route element={<RoleRoute allow={['User']} />}>
           <Route path="/user/dashboard" element={<UserDashboard />} />
           <Route path="/user/transactions" element={<UserDashboard />} />
           <Route path="/user/reports" element={<UserDashboard />} />
-          <Route path="/user/settings" element={<UserDashboard />} />
         </Route>
 
         <Route element={<ProtectedRoute />}>

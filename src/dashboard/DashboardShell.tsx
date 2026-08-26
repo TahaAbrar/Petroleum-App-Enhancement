@@ -7,6 +7,9 @@ import type { DashboardConfig } from './types'
 import { BottomIcon, NavIcon } from './icons'
 import { CustomersPage } from './CustomersPage'
 import { DashboardHome, SectionPlaceholder } from './DashboardHome'
+import { TransactionsPage } from './TransactionsPage'
+import { CreditPage } from './CreditPage'
+import { DebitPage } from './DebitPage'
 
 type Props = {
   config: DashboardConfig
@@ -19,23 +22,18 @@ export function DashboardShell({ config }: Props) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
   const profileMenuRef = useRef<HTMLDivElement>(null)
 
   const { nav, bottomNav, homePath, txPath, portalTitle, roleLabel } = config
-  const settingsPath = homePath.replace(/\/dashboard$/, '/settings')
   const active = nav.find((item) => item.path === location.pathname)?.id ?? 'dashboard'
-  const activeLabel =
-    location.pathname === settingsPath
-      ? 'Settings'
-      : nav.find((n) => n.id === active)?.label || 'Dashboard'
-  const activePath =
-    location.pathname === settingsPath
-      ? settingsPath
-      : nav.find((n) => n.id === active)?.path || homePath
+  const activeLabel = nav.find((n) => n.id === active)?.label || 'Dashboard'
+  const activePath = nav.find((n) => n.id === active)?.path || homePath
   const displayName = session?.user?.username || 'User'
   const initial = displayName.charAt(0).toUpperCase()
-  const showSection = active !== 'dashboard' || location.pathname === settingsPath
-  const isCustomers = active === 'customers' && location.pathname !== settingsPath
+  const showSection = active !== 'dashboard'
+  const isCustomers = active === 'customers'
 
   useEffect(() => {
     if (!profileMenuOpen) return
@@ -65,17 +63,31 @@ export function DashboardShell({ config }: Props) {
     setProfileMenuOpen(false)
   }, [location.pathname])
 
+  useEffect(() => {
+    if (!logoutConfirmOpen) return
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape' && !loggingOut) setLogoutConfirmOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [logoutConfirmOpen, loggingOut])
+
   async function handleLogout() {
-    setProfileMenuOpen(false)
-    await apiLogout()
-    toast.info('You have been logged out.')
-    navigate('/login', { replace: true })
+    if (loggingOut) return
+    setLoggingOut(true)
+    try {
+      await apiLogout()
+      setLogoutConfirmOpen(false)
+      toast.info('You have been logged out.')
+      navigate('/login', { replace: true })
+    } finally {
+      setLoggingOut(false)
+    }
   }
 
-  function goSettings() {
+  function requestLogout() {
     setProfileMenuOpen(false)
-    setSidebarOpen(false)
-    navigate(settingsPath)
+    setLogoutConfirmOpen(true)
   }
 
   return (
@@ -168,25 +180,8 @@ export function DashboardShell({ config }: Props) {
               <button
                 type="button"
                 role="menuitem"
-                className="flex w-full items-center gap-2 border-0 bg-transparent px-3.5 py-2.5 text-left text-[0.85rem] font-semibold text-ink hover:bg-[#f7f8fa]"
-                onClick={goSettings}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.7" />
-                  <path
-                    d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M5.6 18.4l1.6-1.6M16.8 7.2l1.6-1.6"
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                Setting
-              </button>
-              <button
-                type="button"
-                role="menuitem"
                 className="flex w-full items-center gap-2 border-0 bg-transparent px-3.5 py-2.5 text-left text-[0.85rem] font-semibold text-[#c62828] hover:bg-[#fff5f5]"
-                onClick={handleLogout}
+                onClick={requestLogout}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path
@@ -295,8 +290,14 @@ export function DashboardShell({ config }: Props) {
         </header>
 
         <div className="flex flex-col gap-3.5 px-4 pb-4 pt-1 lg:gap-[1.15rem] lg:px-6 lg:pb-8 lg:pt-2">
-          {isCustomers ? (
-            <CustomersPage searchQuery={query} />
+          {active === 'customers' ? (
+            <CustomersPage searchQuery={query} txPath={txPath} />
+          ) : active === 'transactions' ? (
+            <TransactionsPage homePath={homePath} searchQuery={query} />
+          ) : active === 'credit' ? (
+            <CreditPage homePath={homePath} txPath={txPath} searchQuery={query} />
+          ) : active === 'debit' ? (
+            <DebitPage homePath={homePath} txPath={txPath} searchQuery={query} />
           ) : showSection ? (
             <SectionPlaceholder title={activeLabel} path={activePath} />
           ) : (
@@ -339,9 +340,7 @@ export function DashboardShell({ config }: Props) {
 
             const moreActive =
               item.id === 'more' &&
-              (sidebarOpen ||
-                location.pathname.endsWith('/settings') ||
-                location.pathname.endsWith('/reports'))
+              (sidebarOpen || location.pathname.endsWith('/reports'))
 
             const activeTab =
               item.id === 'home'
@@ -374,6 +373,54 @@ export function DashboardShell({ config }: Props) {
           })}
         </div>
       </nav>
+
+      {logoutConfirmOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="presentation">
+          <button
+            type="button"
+            className="absolute inset-0 border-0 bg-ink/45 backdrop-blur-[2px]"
+            aria-label="Close logout confirmation"
+            disabled={loggingOut}
+            onClick={() => {
+              if (!loggingOut) setLogoutConfirmOpen(false)
+            }}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="logout-confirm-title"
+            className="relative z-10 w-full max-w-[22rem] rounded-2xl border border-line bg-white p-5 shadow-[0_20px_50px_rgba(26,29,33,0.2)] animate-rise"
+          >
+            <h2
+              id="logout-confirm-title"
+              className="m-0 text-[1.1rem] font-extrabold tracking-[-0.02em] text-ink"
+            >
+              Logout Confirmation 
+            </h2>
+            <p className="mt-2 mb-0 text-[0.88rem] font-medium leading-relaxed text-muted">
+              Are you sure you want to log out of FuelLedger?
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                disabled={loggingOut}
+                onClick={() => setLogoutConfirmOpen(false)}
+                className="cursor-pointer rounded-xl border border-line bg-white px-4 py-2.5 text-[0.85rem] font-bold text-ink hover:bg-[#f7f8fa] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={loggingOut}
+                onClick={handleLogout}
+                className="cursor-pointer rounded-xl border-0 bg-[#e11d48] px-4 py-2.5 text-[0.85rem] font-bold text-white shadow-[0_6px_14px_rgba(225,29,72,0.28)] hover:brightness-95 disabled:opacity-50"
+              >
+                {loggingOut ? 'Logging out…' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

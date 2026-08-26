@@ -308,3 +308,105 @@ export function formatFilterDate(iso: string) {
     year: 'numeric',
   })
 }
+
+export type CustomerTxType = 'Credit' | 'Debit'
+
+export type CustomerTransaction = {
+  id: string
+  when: string
+  type: CustomerTxType
+  product: string
+  quantity: string
+  rate: string
+  amount: number
+  balance: number
+  by: string
+}
+
+export type CustomerDetail = Customer & {
+  cnic: string
+  address: string
+  notes: string
+  totalCredit: number
+  totalDebit: number
+  transactionCount: number
+  transactions: CustomerTransaction[]
+}
+
+/** Dummy detail enrichment — replace with API later */
+export function getCustomerDetail(customer: Customer): CustomerDetail {
+  const seed = Number(customer.id.replace(/\D/g, '')) || 1
+  const totalCredit = Math.round(customer.openingBalance * 0.7 + seed * 120)
+  const totalDebit = Math.max(0, totalCredit - (customer.currentBalance - customer.openingBalance))
+  const transactionCount = 8 + (seed % 12)
+
+  const transactions: CustomerTransaction[] = [
+    {
+      id: `TXN-${String(seed).padStart(5, '0')}`,
+      when: '17 May 2025 10:30 AM',
+      type: 'Debit',
+      product: 'Diesel',
+      quantity: '500 Ltr',
+      rate: '100.00',
+      amount: 50000,
+      balance: customer.currentBalance,
+      by: 'Admin',
+    },
+    {
+      id: `TXN-${String(seed - 1).padStart(5, '0')}`,
+      when: '16 May 2025 04:15 PM',
+      type: 'Credit',
+      product: 'Payment Received',
+      quantity: '—',
+      rate: '—',
+      amount: 20000,
+      balance: customer.currentBalance + 50000,
+      by: 'Admin',
+    },
+    {
+      id: `TXN-${String(seed - 2).padStart(5, '0')}`,
+      when: '15 May 2025 11:05 AM',
+      type: 'Debit',
+      product: 'Petrol',
+      quantity: '250 Ltr',
+      rate: '89.00',
+      amount: 22250,
+      balance: customer.currentBalance + 30000,
+      by: 'Accountant',
+    },
+    {
+      id: `TXN-${String(seed - 3).padStart(5, '0')}`,
+      when: '14 May 2025 09:40 AM',
+      type: 'Credit',
+      product: 'Bank Transfer',
+      quantity: '—',
+      rate: '—',
+      amount: 35000,
+      balance: customer.currentBalance + 52250,
+      by: 'Admin',
+    },
+    {
+      id: `TXN-${String(seed - 4).padStart(5, '0')}`,
+      when: '12 May 2025 02:20 PM',
+      type: 'Debit',
+      product: 'Lubricants',
+      quantity: '20 Pack',
+      rate: '570.00',
+      amount: 11400,
+      balance: customer.currentBalance + 17250,
+      by: 'User',
+    },
+  ]
+
+  return {
+    ...customer,
+    cnic: `12345-${String(6789000 + (seed % 9000)).slice(0, 7)}-${seed % 10}`,
+    address: 'Street No. 10, Korangi, Karachi, Pakistan',
+    notes: 'Regular customer. Good payment history.',
+    totalCredit,
+    totalDebit,
+    transactionCount,
+    transactions,
+  }
+}
+

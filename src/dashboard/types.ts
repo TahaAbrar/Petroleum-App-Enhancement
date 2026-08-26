@@ -5,7 +5,6 @@ export type NavId =
   | 'debit'
   | 'transactions'
   | 'reports'
-  | 'settings'
 
 export type PortalRole = 'Administrator' | 'Accountant' | 'User'
 
