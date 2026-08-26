@@ -5,6 +5,7 @@ import { apiLogout, getSession } from '../lib/auth'
 import { toast } from '../toast'
 import type { DashboardConfig } from './types'
 import { BottomIcon, NavIcon } from './icons'
+import { CustomersPage } from './CustomersPage'
 import { DashboardHome, SectionPlaceholder } from './DashboardHome'
 import { TransactionsPage } from './TransactionsPage'
 import { CreditPage } from './CreditPage'
@@ -32,6 +33,7 @@ export function DashboardShell({ config }: Props) {
   const displayName = session?.user?.username || 'User'
   const initial = displayName.charAt(0).toUpperCase()
   const showSection = active !== 'dashboard'
+  const isCustomers = active === 'customers'
 
   useEffect(() => {
     if (!profileMenuOpen) return
@@ -247,7 +249,7 @@ export function DashboardShell({ config }: Props) {
             </svg>
             <input
               type="search"
-              placeholder="Search here..."
+              placeholder={isCustomers ? 'Search customers...' : 'Search here...'}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="w-full border-0 bg-transparent text-[0.9rem] text-ink outline-none"
@@ -288,7 +290,9 @@ export function DashboardShell({ config }: Props) {
         </header>
 
         <div className="flex flex-col gap-3.5 px-4 pb-4 pt-1 lg:gap-[1.15rem] lg:px-6 lg:pb-8 lg:pt-2">
-          {active === 'transactions' ? (
+          {active === 'customers' ? (
+            <CustomersPage searchQuery={query} />
+          ) : active === 'transactions' ? (
             <TransactionsPage homePath={homePath} searchQuery={query} />
           ) : active === 'credit' ? (
             <CreditPage homePath={homePath} txPath={txPath} searchQuery={query} />
