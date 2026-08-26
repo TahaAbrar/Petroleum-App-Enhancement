@@ -116,9 +116,14 @@ npm run dev -- --host 0.0.0.0 --port 5174
 - Settings remains removed (`showSection = active !== 'dashboard'`, `isCustomers = active === 'customers'`).
 - Staged resolution; merge commit still needed by user if not committed yet.
 
+## Merge conflict resolve (2026-08-26, Reports + pageCache)
+- Unmerged: `src/dashboard/DashboardShell.tsx` on `feature/CustomerPage` while merging Reports from main.
+- Resolution: keep **both** `pageCache` (`clearPageCache` / `prefetchDashboardPages`) and `ReportsPage` imports.
+- Bottom nav: incoming renamed More → Reports (real page). Dropped HEAD `more`/`moreActive` + sidebar-open click. Kept HEAD nested Customers path match so details URLs stay on the Customers tab.
+- Staged; merge commit not created unless requested.
+
 ## Customer Details page (2026-08-26, live)
 
-- `src/dashboard/CustomerDetailsPage.tsx` — mobile + desktop, **live AccReg/Leger**
 - Opens at `/customers/{slug}` (or `/accountant/customers/{slug}`) — slug is `kebab-name-accid`, data loaded via `GET /api/customers/slug/:slug`
 - **No** +Credit / +Debit buttons; **View All Transactions removed**
 - Fields: AccNo (Customer ID), NIC (CNIC), Opening (ledger before today), Closing (full SUM Debit-Credit), name/phone/email/address/notes/Dated
@@ -127,6 +132,20 @@ npm run dev -- --host 0.0.0.0 --port 5174
 - History date filter is **From – To** range (`dateFrom`/`dateTo` query params, inclusive). Empty range = all dates. Tab switch clears the range.
 - Shared `src/dashboard/filters.tsx`: DateRangeFilter + MenuFilter. Entire control is clickable (`showPicker` / custom list). Customers list Status/Type use the styled menu; list date is From–To on `AccReg.Dated`.
 - Dashboard prefetch: login + every visit to dashboard starts background fetch of customers (40) + groups + transactions page data (`pageCache.ts`). Customers list shows 15, then +15 after scrolling ~5 rows (API batch 40). LoadingHint spinner with text.
+
+## Customer details split (2026-08-26)
+
+`CustomerDetailsPage.tsx` was 1000+ lines; split without behavior change. `CustomersPage` still imports `./CustomerDetailsPage`.
+
+| File | Role |
+|------|------|
+| `dashboard/CustomerDetailsPage.tsx` | Fetch slug, tab/date/sort state, compose panels (~100 lines) |
+| `dashboard/customerDetails/useCustomerHistory.ts` | Lazy history fetch / reveal / prefetch hook |
+| `dashboard/customerDetails/Profile.tsx` | Back nav, profile, balances, info, summary |
+| `dashboard/customerDetails/HistoryPanel.tsx` | Tabs, date/sort, mobile list + desktop table + intersection observers |
+| `dashboard/customerDetails/ui.tsx` | Pills, chips, cards, table cells, icons |
+
+Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info/summary/history → Credit History tab → Back to Customers.
 
 ## Backend inventory (2026-08-26, updated)
 
@@ -137,6 +156,13 @@ npm run dev -- --host 0.0.0.0 --port 5174
 - **DB env:** `server/.env` — `DB_*`, `JWT_*`, `API_READ_KEY`
 - **FE:** `src/lib/api.ts` sends Bearer + key; `customers.ts` is live helpers (mock array removed)
 - **Balance:** `ISNULL(OpBal,0) + SUM(Debit) - SUM(Credit)`; history running balance via window on Trid; include Posted + NULL ledger rows
+
+## Reports page (2026-08-26)
+- `src/dashboard/ReportsPage.tsx` + `reportsData.ts` — dummy UI
+- Desktop: filters (+ product), Export, Generate, 4 KPIs, Top Customers + Product summary tables
+- Mobile: filters (no product), Generate, 2×2 KPIs, Recent Transactions
+- Charts removed: Credit vs Debit, Daily Net Flow
+- Wired in `DashboardShell` when `active === 'reports'`; bottom nav **More** → **Reports**
 
 ## Agent notes
 - Multiple agents: read this file before work; update after meaningful changes.
