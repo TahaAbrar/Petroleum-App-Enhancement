@@ -124,6 +124,13 @@ npm run dev -- --host 0.0.0.0 --port 5174
 - Customer Information + Summary use **icon cards** (name, phone, email, address, balances, notes, account since; credit/debit/tx summary)
 - Detail extras via `getCustomerDetail()` in `customers.ts` (dummy CNIC/address/notes/txs)
 
+## Reports page (2026-08-26)
+- `src/dashboard/ReportsPage.tsx` + `reportsData.ts` — dummy UI
+- Desktop: filters (+ product), Export, Generate, 4 KPIs, Top Customers + Product summary tables
+- Mobile: filters (no product), Generate, 2×2 KPIs, Recent Transactions
+- Charts removed: Credit vs Debit, Daily Net Flow
+- Wired in `DashboardShell` when `active === 'reports'`; bottom nav **More** → **Reports**
+
 ## Agent notes
 - Multiple agents: read this file before work; update after meaningful changes.
 - `knowledge_base/` is the shared coordination folder.
