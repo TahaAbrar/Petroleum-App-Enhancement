@@ -129,7 +129,14 @@ npm run dev -- --host 0.0.0.0 --port 5174
 - Desktop: filters (+ product), Export, Generate, 4 KPIs, Top Customers + Product summary tables
 - Mobile: filters (no product), Generate, 2×2 KPIs, Recent Transactions
 - Charts removed: Credit vs Debit, Daily Net Flow
-- Wired in `DashboardShell` when `active === 'reports'`; bottom nav **More** → **Reports**
+- Wired in `DashboardShell` when `active === 'reports'`; bottom nav **Reports**
+
+## Chart of Accounts (sidebar item under Reports) — 2026-08-26
+- Separate sidebar nav item **below Reports** (not a tab inside Reports)
+- Routes: `/chart-of-accounts`, `/accountant/chart-of-accounts`, `/user/chart-of-accounts`
+- Files: `ChartOfAccountsPage.tsx`, `chartOfAccountsData.ts`
+- 3-step drill-down: Charts → Sub Charts → Accounts
+- Breadcrumbs + Back; mobile cards + desktop tables; FuelLedger theme dummy data
 
 ## Agent notes
 - Multiple agents: read this file before work; update after meaningful changes.
