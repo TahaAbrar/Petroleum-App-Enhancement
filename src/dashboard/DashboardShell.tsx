@@ -291,7 +291,7 @@ export function DashboardShell({ config }: Props) {
 
         <div className="flex flex-col gap-3.5 px-4 pb-4 pt-1 lg:gap-[1.15rem] lg:px-6 lg:pb-8 lg:pt-2">
           {active === 'customers' ? (
-            <CustomersPage searchQuery={query} />
+            <CustomersPage searchQuery={query} txPath={txPath} />
           ) : active === 'transactions' ? (
             <TransactionsPage homePath={homePath} searchQuery={query} />
           ) : active === 'credit' ? (

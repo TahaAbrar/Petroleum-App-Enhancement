@@ -8,6 +8,7 @@ import {
   type CustomerStatus,
   type CustomerType,
 } from './customers'
+import { CustomerDetailsPage } from './CustomerDetailsPage'
 import { CustomerMark } from './icons'
 import { panel } from './styles'
 
@@ -18,9 +19,10 @@ const filterBox =
 
 type Props = {
   searchQuery?: string
+  txPath: string
 }
 
-export function CustomersPage({ searchQuery = '' }: Props) {
+export function CustomersPage({ searchQuery = '', txPath }: Props) {
   const [rows, setRows] = useState<Customer[]>(CUSTOMERS)
   const [date, setDate] = useState('')
   const [status, setStatus] = useState<CustomerStatus | ''>('')
@@ -59,6 +61,16 @@ export function CustomersPage({ searchQuery = '' }: Props) {
     setRows((prev) => prev.filter((c) => c.id !== customer.id))
     if (viewing?.id === customer.id) setViewing(null)
     toast.success(`${customer.name} removed`)
+  }
+
+  if (viewing) {
+    return (
+      <CustomerDetailsPage
+        customer={viewing}
+        onBack={() => setViewing(null)}
+        txPath={txPath}
+      />
+    )
   }
 
   return (
@@ -108,7 +120,8 @@ export function CustomersPage({ searchQuery = '' }: Props) {
               {pageRows.map((row) => (
                 <li
                   key={row.id}
-                  className="rounded-2xl border border-line bg-[#fafbfc] p-3.5 shadow-[0_4px_14px_rgba(26,29,33,0.04)]"
+                  className="cursor-pointer rounded-2xl border border-line bg-[#fafbfc] p-3.5 shadow-[0_4px_14px_rgba(26,29,33,0.04)]"
+                  onClick={() => setViewing(row)}
                 >
                   <div className="flex items-start gap-3">
                     <div className="grid size-11 shrink-0 place-items-center rounded-full bg-white shadow-[0_4px_14px_rgba(26,29,33,0.1)] ring-1 ring-black/5">
@@ -118,7 +131,6 @@ export function CustomersPage({ searchQuery = '' }: Props) {
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="m-0 truncate text-[0.92rem] font-extrabold text-ink">{row.name}</p>
-                          <p className="mt-0.5 mb-0 text-[0.72rem] font-semibold text-muted">{row.id}</p>
                         </div>
                         <ActionButtons
                           onView={() => setViewing(row)}
@@ -147,7 +159,6 @@ export function CustomersPage({ searchQuery = '' }: Props) {
                 <thead>
                   <tr>
                     {[
-                      'Customer ID',
                       'Customer Name',
                       'Phone',
                       'Email',
@@ -167,10 +178,11 @@ export function CustomersPage({ searchQuery = '' }: Props) {
                 </thead>
                 <tbody>
                   {pageRows.map((row) => (
-                    <tr key={row.id} className="hover:bg-[#fcfcfd]">
-                      <td className="border-b border-[#f1f2f4] px-2.5 py-3.5 text-[0.84rem] whitespace-nowrap text-[#374151]">
-                        {row.id}
-                      </td>
+                    <tr
+                      key={row.id}
+                      className="cursor-pointer hover:bg-[#fcfcfd]"
+                      onClick={() => setViewing(row)}
+                    >
                       <td className="border-b border-[#f1f2f4] px-2.5 py-3.5 text-[0.84rem] font-semibold whitespace-nowrap text-ink">
                         {row.name}
                       </td>
@@ -193,7 +205,10 @@ export function CustomersPage({ searchQuery = '' }: Props) {
                       <td className="border-b border-[#f1f2f4] px-2.5 py-3.5 whitespace-nowrap">
                         <StatusPill status={row.status} />
                       </td>
-                      <td className="border-b border-[#f1f2f4] px-2.5 py-3.5 whitespace-nowrap">
+                      <td
+                        className="border-b border-[#f1f2f4] px-2.5 py-3.5 whitespace-nowrap"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <ActionButtons
                           onView={() => setViewing(row)}
                           onDelete={() => handleDelete(row)}
@@ -214,10 +229,6 @@ export function CustomersPage({ searchQuery = '' }: Props) {
           </>
         )}
       </section>
-
-      {viewing && (
-        <CustomerView customer={viewing} onClose={() => setViewing(null)} onDelete={handleDelete} />
-      )}
     </>
   )
 }
@@ -305,7 +316,7 @@ function StatusPill({ status }: { status: CustomerStatus }) {
 
 function ActionButtons({ onView, onDelete }: { onView: () => void; onDelete: () => void }) {
   return (
-    <div className="inline-flex items-center gap-1.5">
+    <div className="inline-flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
         onClick={onView}
@@ -409,100 +420,6 @@ function PageNav({
         {children}
       </svg>
     </button>
-  )
-}
-
-function CustomerView({
-  customer,
-  onClose,
-  onDelete,
-}: {
-  customer: Customer
-  onClose: () => void
-  onDelete: (c: Customer) => void
-}) {
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
-
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
-      <button
-        type="button"
-        className="absolute inset-0 border-0 bg-ink/35"
-        aria-label="Close customer details"
-        onClick={onClose}
-      />
-      <article className="relative z-10 w-full max-w-md rounded-3xl border border-white/80 bg-white p-5 shadow-auth">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="grid size-12 place-items-center rounded-full bg-fuel text-ink">
-              <CustomerMark />
-            </div>
-            <div>
-              <h2 className="m-0 text-lg font-extrabold tracking-[-0.02em]">{customer.name}</h2>
-              <p className="mt-0.5 mb-0 text-[0.78rem] font-semibold text-muted">{customer.id}</p>
-            </div>
-          </div>
-          <StatusPill status={customer.status} />
-        </div>
-        <dl className="m-0 grid grid-cols-1 gap-3 text-sm">
-          <ViewRow label="Phone" value={customer.phone} />
-          <ViewRow label="Email" value={customer.email} />
-          <ViewRow label="Type" value={customer.type} />
-          <ViewRow label="Joined" value={formatFilterDate(customer.createdAt)} />
-          <ViewRow
-            label="Current Balance"
-            value={formatPkr(customer.currentBalance)}
-            tone={customer.currentBalance < 0 ? 'debit' : 'credit'}
-          />
-          <ViewRow label="Opening Balance" value={formatPkr(customer.openingBalance)} />
-        </dl>
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => onDelete(customer)}
-            className="rounded-xl border-0 bg-debit-bg px-3.5 py-2 text-[0.82rem] font-bold text-debit hover:brightness-95"
-          >
-            Delete
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl border-0 bg-fuel px-3.5 py-2 text-[0.82rem] font-bold text-ink shadow-[0_6px_14px_rgba(245,197,24,0.3)]"
-          >
-            Close
-          </button>
-        </div>
-      </article>
-    </div>
-  )
-}
-
-function ViewRow({
-  label,
-  value,
-  tone,
-}: {
-  label: string
-  value: string
-  tone?: 'credit' | 'debit'
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 border-b border-[#f1f2f4] pb-2.5 last:border-b-0 last:pb-0">
-      <dt className="m-0 font-semibold text-muted">{label}</dt>
-      <dd
-        className={`m-0 font-bold ${
-          tone === 'credit' ? 'text-credit' : tone === 'debit' ? 'text-debit' : 'text-ink'
-        }`}
-      >
-        {value}
-      </dd>
-    </div>
   )
 }
 

@@ -110,6 +110,20 @@ npm run dev -- --host 0.0.0.0 --port 5174
 ## Logout confirm modal (2026-08-26)
 - Logout in profile menu opens confirmation dialog; Confirm runs `apiLogout`, Cancel/backdrop/Esc closes.
 
+## Merge conflict resolve (2026-08-26)
+- Conflict only in `DashboardShell.tsx` after `git pull origin main --no-rebase`.
+- Kept both: remote `CustomersPage` + local Transactions/Credit/Debit routing + logout modal.
+- Settings remains removed (`showSection = active !== 'dashboard'`, `isCustomers = active === 'customers'`).
+- Staged resolution; merge commit still needed by user if not committed yet.
+
+## Customer Details page (2026-08-26)
+- `src/dashboard/CustomerDetailsPage.tsx` — mobile + desktop dummy UI
+- Opens when clicking a customer row/card or view icon from `CustomersPage`
+- **No** +Credit / +Debit buttons (mobile or desktop)
+- Desktop: breadcrumbs + **Back to Customers** only
+- Customer Information + Summary use **icon cards** (name, phone, email, address, balances, notes, account since; credit/debit/tx summary)
+- Detail extras via `getCustomerDetail()` in `customers.ts` (dummy CNIC/address/notes/txs)
+
 ## Agent notes
 - Multiple agents: read this file before work; update after meaningful changes.
 - `knowledge_base/` is the shared coordination folder.
