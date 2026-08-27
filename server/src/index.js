@@ -10,6 +10,7 @@ import { requireAuth, requireReadKey, requireRoles } from './middleware.js'
 import { customerRouter } from './customerRoutes.js'
 import { transactionRouter } from './transactionRoutes.js'
 import { dashboardRouter } from './dashboardRoutes.js'
+import { companyRouter } from './companyRoutes.js'
 
 const app = express()
 
@@ -98,6 +99,15 @@ app.use(
   requireAuth,
   requireRoles('Administrator', 'Accountant', 'User'),
   dashboardRouter,
+)
+
+app.use(
+  '/api/company',
+  transactionLimiter,
+  requireReadKey,
+  requireAuth,
+  requireRoles('Administrator', 'Accountant', 'User'),
+  companyRouter,
 )
 
 app.all(/^\/api\/.*/, (_req, res) => {
