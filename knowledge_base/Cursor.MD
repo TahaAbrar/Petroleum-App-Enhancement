@@ -59,21 +59,24 @@ npm run dev -- --host 0.0.0.0 --port 5174
 - BE URL: `http://169.58.29.84:5000`
 - If FE uses Vite proxy, set proxy target to `http://127.0.0.1:5000` and add public FE origin to `CORS_ORIGIN`.
 
-## Transactions page (2026-08-26)
+## Transactions page (2026-08-26, live)
 
-**Status:** Dummy UI done — responsive desktop + mobile. Not wired to DB yet.
+**Status:** Live SQL via `GET /api/transactions`. Dummy `transactionsData.ts` removed.
 
 ### Files
-- `src/dashboard/TransactionsPage.tsx` — full page UI (filters, summary, table/cards, pagination)
-- `src/dashboard/transactionsData.ts` — dummy rows + summary stats (swap for API later)
+- `src/dashboard/TransactionsPage.tsx` — filters, live summary, table/cards, lazy reveal + pager
+- `src/dashboard/transactions.ts` — types + `fetchTransactions` / `fetchTransactionCustomers`
+- `server/src/transactionRoutes.js` — SELECT-only list/summary + customer names
 - Wired in `DashboardShell` when `active === 'transactions'` (all roles: `/transactions`, `/accountant/transactions`, `/user/transactions`)
 
-### UI matches screenshot
-- Desktop: title + breadcrumbs + Export, filters, 4 summary cards, table (ID, Date, Customer, Type, Product, Amount, Balance, Reference, Created By, Action), pagination
-- Mobile: same filters, tinted 2×2 Summary, card list with type badge / amount / balance, bottom nav unchanged
-
-### Next (user will provide)
-- SQL / API query to replace `ALL_TRANSACTIONS` + `TX_SUMMARY` with live data
+### Behavior
+- Prefetch on login/dashboard: first 50 rows + summary + AccReg names (`pageCache.ts`)
+- First paint **15** rows; after ~5th row / sentinel reveal **+15** until 50; numbered pager for the next 50 (scrolls to top)
+- Filters: searchable customer menu (All customers + typeahead), From/To dates, type menu, Reset + Filter — dropdowns stack above summary cards
+- Summary: live COUNT / SUM(Credit) / SUM(Debit) / Net Flow (Credit − Debit). No dummy percentages
+- Table: `table-fixed` like customer history; Date only (no time); product wraps; Amount/Balance stack PKR
+- Removed: ID column, Export, “Showing 1 to 10” / n-per-page dropdown
+- Route changes (sidebar) also scroll to top via `DashboardShell`
 
 ## Credit page (2026-08-26)
 
@@ -116,13 +119,46 @@ npm run dev -- --host 0.0.0.0 --port 5174
 - Settings remains removed (`showSection = active !== 'dashboard'`, `isCustomers = active === 'customers'`).
 - Staged resolution; merge commit still needed by user if not committed yet.
 
-## Customer Details page (2026-08-26)
-- `src/dashboard/CustomerDetailsPage.tsx` — mobile + desktop dummy UI
-- Opens when clicking a customer row/card or view icon from `CustomersPage`
-- **No** +Credit / +Debit buttons (mobile or desktop)
-- Desktop: breadcrumbs + **Back to Customers** only
-- Customer Information + Summary use **icon cards** (name, phone, email, address, balances, notes, account since; credit/debit/tx summary)
-- Detail extras via `getCustomerDetail()` in `customers.ts` (dummy CNIC/address/notes/txs)
+## Merge conflict resolve (2026-08-26, Reports + pageCache)
+- Unmerged: `src/dashboard/DashboardShell.tsx` on `feature/CustomerPage` while merging Reports from main.
+- Resolution: keep **both** `pageCache` (`clearPageCache` / `prefetchDashboardPages`) and `ReportsPage` imports.
+- Bottom nav: incoming renamed More → Reports (real page). Dropped HEAD `more`/`moreActive` + sidebar-open click. Kept HEAD nested Customers path match so details URLs stay on the Customers tab.
+- Staged; merge commit not created unless requested.
+
+## Customer Details page (2026-08-26, live)
+
+- Opens at `/customers/{slug}` (or `/accountant/customers/{slug}`) — slug is `kebab-name-accid`, data loaded via `GET /api/customers/slug/:slug`
+- **No** +Credit / +Debit buttons; **View All Transactions removed**
+- Fields: AccNo (Customer ID), NIC (CNIC), Opening (ledger before today), Closing (full SUM Debit-Credit), name/phone/email/address/notes/Dated
+- Summary: SUM(Credit), SUM(Debit), COUNT(Trid) — credit is 0 when Leger.Credit is 0 in DB
+- History table uses `table-fixed`; long Product/Service wraps (2 lines); amounts stack PKR so columns stay inside the card.
+- History date filter is **From – To** range (`dateFrom`/`dateTo` query params, inclusive). Empty range = all dates. Tab switch clears the range.
+- Shared `src/dashboard/filters.tsx`: DateRangeFilter + MenuFilter. Entire control is clickable (`showPicker` / custom list). Customers list Status/Type use the styled menu; list date is From–To on `AccReg.Dated`.
+- Dashboard prefetch: login + every visit to dashboard starts background fetch of customers (40) + groups + **live** transactions page 1 (50) + transaction customer names (`pageCache.ts`). Customers list shows 15, then +15 after scrolling ~5 rows (API batch 40). LoadingHint spinner with text.
+
+## Customer details split (2026-08-26)
+
+`CustomerDetailsPage.tsx` was 1000+ lines; split without behavior change. `CustomersPage` still imports `./CustomerDetailsPage`.
+
+| File | Role |
+|------|------|
+| `dashboard/CustomerDetailsPage.tsx` | Fetch slug, tab/date/sort state, compose panels (~100 lines) |
+| `dashboard/customerDetails/useCustomerHistory.ts` | Lazy history fetch / reveal / prefetch hook |
+| `dashboard/customerDetails/Profile.tsx` | Back nav, profile, balances, info, summary |
+| `dashboard/customerDetails/HistoryPanel.tsx` | Tabs, date/sort, mobile list + desktop table + intersection observers |
+| `dashboard/customerDetails/ui.tsx` | Pills, chips, cards, table cells, icons |
+
+Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info/summary/history → Credit History tab → Back to Customers.
+
+## Backend inventory (2026-08-26, updated)
+
+- **Only backend:** `app-enhancement/server/` — Express 5 + `mssql` (tedious). No Nest/Prisma.
+- **Routes:** health, auth login/logout/me, **customers list/groups/slug/:slug/:accid/:accid/transactions**, **transactions list/customers**
+- **SQL:** parameterized SELECT on `UserReg`, `AccReg`, `Leger`, `GroupReg` — never INSERT/UPDATE/DELETE
+- **Auth:** JWT HS256 (`fl_token` + Bearer) + `requireRoles(Administrator, Accountant)` on customer routes + `requireRoles(Administrator, Accountant, User)` on transaction routes + `X-FuelLedger-Key` (`API_READ_KEY`) + 60/min rate limit
+- **DB env:** `server/.env` — `DB_*`, `JWT_*`, `API_READ_KEY`
+- **FE:** `src/lib/api.ts` sends Bearer + key; `customers.ts` is live helpers (mock array removed)
+- **Balance:** `ISNULL(OpBal,0) + SUM(Debit) - SUM(Credit)`; history running balance via window on Trid; include Posted + NULL ledger rows
 
 ## Reports page (2026-08-26)
 - `src/dashboard/ReportsPage.tsx` + `reportsData.ts` — dummy UI
@@ -138,6 +174,12 @@ npm run dev -- --host 0.0.0.0 --port 5174
 - 3-step drill-down: Charts → Sub Charts → Accounts
 - Breadcrumbs + Back; mobile cards + desktop tables; FuelLedger theme dummy data
 
+## Merge conflict resolve (2026-08-27, Chart of Accounts + company brand)
+- Unmerged: `src/dashboard/DashboardShell.tsx` on `feature/CustomerPage`.
+- Working tree had dropped both import blocks while the body still used company helpers and `ChartOfAccountsPage`.
+- Resolution: keep HEAD company brand (`./company`, pageCache, nested Customers tab, logout menus) **and** incoming `ChartOfAccountsPage` import/route.
+- Staged; merge commit not created unless requested.
+
 ## Agent notes
 - Multiple agents: read this file before work; update after meaningful changes.
 - `knowledge_base/` is the shared coordination folder.
@@ -147,22 +189,18 @@ npm run dev -- --host 0.0.0.0 --port 5174
 ### Routing model
 - Single router in `src/App.tsx` (react-router-dom `BrowserRouter`).
 - Role-gated routes all render thin page wrappers that mount `DashboardShell` with a role config.
-- Non-dashboard paths (customers, credit, debit, **transactions**, reports, settings) currently show `SectionPlaceholder` only — **no real Transactions page UI yet**.
+- Non-dashboard paths (customers, credit, debit, **transactions**, reports) render real page components via `DashboardShell`.
 
 ### Key paths
 - Shell: `src/dashboard/DashboardShell.tsx` (sidebar + header + mobile bottom nav)
-- Home content: `src/dashboard/DashboardHome.tsx` (stats, charts, recent tx table — best UI reference for Transactions)
+- Home content: `src/dashboard/DashboardHome.tsx` — live **Recent Transactions** (top 5 from `/api/transactions`, force-refresh on visit)
 - Nav/config: `src/dashboard/nav.ts` (`adminConfig` / `accountantConfig` / `userConfig`)
 - Tokens: `src/index.css` `@theme` (`fuel` yellow `#f5c518`, surface, ink, credit/debit)
 - Style helpers: `src/dashboard/styles.ts` (`panel`, `selectBtn`) — **no Button/Card/Table component library**
 - Auth: `src/lib/auth.ts` + `src/components/ProtectedRoute.tsx` (`RoleRoute`, `PublicOnlyRoute`)
 
-### Transactions routes (exist, placeholder only)
+### Transactions routes (live)
 - Admin: `/transactions`
 - Accountant: `/accountant/transactions`
 - User: `/user/transactions`
-
-### Build Transactions by
-1. Replace `SectionPlaceholder` branch in `DashboardShell` when `active === 'transactions'` (or add a dedicated page component and switch on `active` / pathname).
-2. Reuse `TRANSACTIONS` mock + table/list patterns from `DashboardHome`.
-3. Keep FuelLedger chrome (yellow active nav, `panel` cards, credit/debit badges).
+- Data: `GET /api/transactions` + `GET /api/transactions/customers`

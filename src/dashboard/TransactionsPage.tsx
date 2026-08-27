@@ -1,87 +1,208 @@
-import { useMemo, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { getUserRole } from '../lib/auth'
+import { toast } from '../toast'
+import { applyDateRange, DateRangeFilter, MenuFilter, SearchableCustomerFilter } from './filters'
+import { LoadingHint } from './loading'
+import { PkrCell, PkrValue } from './customerDetails/ui'
 import {
-  ALL_TRANSACTIONS,
-  DEFAULT_DATE_LABEL,
-  TX_CUSTOMERS,
-  TX_SUMMARY,
-  type TransactionRow,
-  type TxType,
-} from './transactionsData'
+  loadTransactionCustomers,
+  loadTransactionsPage,
+  peekTransactionCustomers,
+  peekTransactions,
+  TX_CHUNK,
+  TX_PAGE_SIZE,
+} from './pageCache'
 import { panel } from './styles'
+import {
+  EMPTY_TX_SUMMARY,
+  dateOnly,
+  type TransactionCustomer,
+  type TransactionListParams,
+  type TransactionRow,
+  type TransactionSummary,
+  type TxKind,
+  type TxSort,
+} from './transactions'
 
 type Props = {
   homePath: string
   searchQuery?: string
 }
 
-type Filters = {
-  customer: string
-  dateLabel: string
-  type: 'All' | TxType
+type DraftFilters = {
+  accid: string
+  dateFrom: string
+  dateTo: string
+  kind: TxKind
 }
 
-const PAGE_SIZE_OPTIONS = [10, 25, 50] as const
+const EMPTY_DRAFT: DraftFilters = {
+  accid: '',
+  dateFrom: '',
+  dateTo: '',
+  kind: 'all',
+}
 
 export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
-  const [draft, setDraft] = useState<Filters>({
-    customer: '',
-    dateLabel: DEFAULT_DATE_LABEL,
-    type: 'All',
-  })
-  const [applied, setApplied] = useState<Filters>(draft)
+  const navigate = useNavigate()
+  const role = getUserRole()
+  const canViewCustomer = role === 'Administrator' || role === 'Accountant'
+  const customersPath = role === 'Accountant' ? '/accountant/customers' : '/customers'
+
+  const [draft, setDraft] = useState<DraftFilters>(EMPTY_DRAFT)
+  const [applied, setApplied] = useState<DraftFilters>(EMPTY_DRAFT)
+  const [debouncedQuery, setDebouncedQuery] = useState(searchQuery)
+  const [sort, setSort] = useState<TxSort>('recent')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(10)
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null)
+  const [customers, setCustomers] = useState<TransactionCustomer[]>(
+    () => peekTransactionCustomers() ?? [],
+  )
 
-  const filtered = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    let rows = ALL_TRANSACTIONS.filter((row) => {
-      if (applied.customer && row.customer !== applied.customer) return false
-      if (applied.type !== 'All' && row.type !== applied.type) return false
-      if (!q) return true
-      return (
-        row.id.toLowerCase().includes(q) ||
-        row.customer.toLowerCase().includes(q) ||
-        row.product.toLowerCase().includes(q) ||
-        row.reference.toLowerCase().includes(q)
-      )
-    })
+  const params: TransactionListParams = useMemo(
+    () => ({
+      q: debouncedQuery.trim(),
+      accid: applied.accid ? Number(applied.accid) : '',
+      dateFrom: applied.dateFrom,
+      dateTo: applied.dateTo,
+      kind: applied.kind,
+      sort,
+    }),
+    [applied, debouncedQuery, sort],
+  )
 
-    rows = [...rows].sort((a, b) => {
-      const cmp = a.dateKey.localeCompare(b.dateKey) || a.id.localeCompare(b.id)
-      return sortDir === 'asc' ? cmp : -cmp
-    })
-    return rows
-  }, [applied, searchQuery, sortDir])
+  const seeded = peekTransactions(params, page)
+  const [fetched, setFetched] = useState<TransactionRow[]>(() => seeded?.rows ?? [])
+  const [total, setTotal] = useState(() => seeded?.total ?? 0)
+  const [summary, setSummary] = useState<TransactionSummary>(() => seeded?.summary ?? EMPTY_TX_SUMMARY)
+  const [visible, setVisible] = useState(() => Math.min(TX_CHUNK, seeded?.rows.length ?? 0))
+  const [loading, setLoading] = useState(() => !seeded)
+  const fetchedRef = useRef(fetched)
+  const afterFiveMobileRef = useRef<HTMLLIElement | null>(null)
+  const afterFiveDesktopRef = useRef<HTMLTableRowElement | null>(null)
+  const mobileSentinelRef = useRef<HTMLDivElement | null>(null)
+  const desktopSentinelRef = useRef<HTMLDivElement | null>(null)
 
-  const total = filtered.length
-  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const skipSearchPageReset = useRef(true)
+
+  useEffect(() => {
+    fetchedRef.current = fetched
+  }, [fetched])
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setDebouncedQuery(searchQuery)
+      if (skipSearchPageReset.current) {
+        skipSearchPageReset.current = false
+        return
+      }
+      setPage(1)
+    }, 200)
+    return () => window.clearTimeout(t)
+  }, [searchQuery])
+
+  useEffect(() => {
+    loadTransactionCustomers()
+      .then(setCustomers)
+      .catch(() => toast.error('Could not load customers'))
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const cached = peekTransactions(params, page)
+    if (cached) {
+      setFetched(cached.rows)
+      setTotal(cached.total)
+      setSummary(cached.summary)
+      setVisible(Math.min(TX_CHUNK, cached.rows.length))
+      setLoading(false)
+    } else {
+      setFetched([])
+      setVisible(TX_CHUNK)
+      setLoading(true)
+    }
+    loadTransactionsPage(params, page)
+      .then((data) => {
+        if (cancelled) return
+        setFetched(data.rows)
+        setTotal(data.total)
+        setSummary(data.summary)
+        setVisible(Math.min(TX_CHUNK, data.rows.length))
+        if (data.rows.length === TX_PAGE_SIZE && page * TX_PAGE_SIZE < data.total) {
+          void loadTransactionsPage(params, page + 1)
+        }
+      })
+      .catch((err) => {
+        if (cancelled || cached) return
+        setFetched([])
+        setTotal(0)
+        setSummary(EMPTY_TX_SUMMARY)
+        toast.error(err instanceof Error ? err.message : 'Could not load transactions')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [params, page])
+
+  const rows = fetched.slice(0, Math.min(visible, fetched.length))
+  const hasMore = visible < fetched.length
+  const totalPages = Math.max(1, Math.ceil(total / TX_PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
-  const start = (safePage - 1) * pageSize
-  const pageRows = filtered.slice(start, start + pageSize)
-  const showingFrom = total === 0 ? 0 : start + 1
-  const showingTo = Math.min(start + pageSize, total)
+
+  const revealMore = useCallback(() => {
+    setVisible((v) => Math.min(v + TX_CHUNK, fetchedRef.current.length || v + TX_CHUNK))
+  }, [])
+
+  useEffect(() => {
+    const observers: IntersectionObserver[] = []
+    const watch = (target: Element | null) => {
+      if (!target) return
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((e) => e.isIntersecting)) revealMore()
+        },
+        { root: null, rootMargin: '220px 0px', threshold: 0.01 },
+      )
+      observer.observe(target)
+      observers.push(observer)
+    }
+    watch(afterFiveMobileRef.current)
+    watch(afterFiveDesktopRef.current)
+    watch(mobileSentinelRef.current)
+    watch(desktopSentinelRef.current)
+    return () => observers.forEach((o) => o.disconnect())
+  }, [revealMore, hasMore, rows.length])
+
+  function goToPage(next: number) {
+    setPage(next)
+    setOpenMenuId(null)
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+  }
 
   function applyFilters() {
     setApplied({ ...draft })
-    setPage(1)
+    goToPage(1)
   }
 
   function resetFilters() {
-    const next: Filters = {
-      customer: '',
-      dateLabel: DEFAULT_DATE_LABEL,
-      type: 'All',
-    }
-    setDraft(next)
-    setApplied(next)
-    setPage(1)
+    setDraft(EMPTY_DRAFT)
+    setApplied(EMPTY_DRAFT)
+    goToPage(1)
   }
 
   function toggleSort() {
-    setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    setSort((current) => (current === 'recent' ? 'oldest' : 'recent'))
+    goToPage(1)
+  }
+
+  function openCustomer(row: TransactionRow) {
+    setOpenMenuId(null)
+    if (!canViewCustomer) return
+    navigate(`${customersPath}/${row.slug}`)
   }
 
   function pageNumbers(): (number | '…')[] {
@@ -100,103 +221,73 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
 
   return (
     <div className="flex flex-col gap-3.5 lg:gap-4">
-      {/* Title row */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="m-0 text-[1.45rem] font-extrabold tracking-[-0.03em] text-ink lg:text-[1.65rem]">
-            Transactions
-          </h1>
-          <p className="mt-1 mb-0 text-[0.78rem] font-medium text-muted">
-            <Link to={homePath} className="text-muted no-underline hover:text-ink">
-              Home
-            </Link>
-            <span className="mx-1.5 text-[#c4c9d2]">›</span>
-            <span className="text-ink">Transactions</span>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="hidden cursor-pointer items-center gap-2 rounded-xl border-0 bg-fuel px-4 py-2.5 text-[0.84rem] font-bold text-ink shadow-[0_6px_16px_rgba(245,197,24,0.32)] hover:brightness-95 lg:inline-flex"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path
-              d="M12 4v12M12 16l-4-4M12 16l4-4M5 20h14"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          Export
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
-        </button>
+      <div>
+        <h1 className="m-0 text-[1.45rem] font-extrabold tracking-[-0.03em] text-ink lg:text-[1.65rem]">
+          Transactions
+        </h1>
+        <p className="mt-1 mb-0 text-[0.78rem] font-medium text-muted">
+          <Link to={homePath} className="text-muted no-underline hover:text-ink">
+            Home
+          </Link>
+          <span className="mx-1.5 text-[#c4c9d2]">›</span>
+          <span className="text-ink">Transactions</span>
+        </p>
       </div>
 
-      {/* Filters */}
-      <section className={`${panel} rounded-2xl p-4 lg:p-5`} aria-label="Filters">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[1.2fr_1.2fr_1fr_auto]">
-          <label className="flex flex-col gap-1.5">
+      <section
+        className={`${panel} relative z-30 overflow-visible rounded-2xl p-4 lg:p-5`}
+        aria-label="Filters"
+      >
+        <div className="grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2 xl:grid-cols-[1.2fr_1.4fr_1fr_auto]">
+          <label className="relative z-10 flex min-w-0 flex-col gap-1.5 overflow-visible">
             <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">Customer</span>
-            <div className="relative">
-              <select
-                value={draft.customer}
-                onChange={(e) => setDraft((f) => ({ ...f, customer: e.target.value }))}
-                className="w-full cursor-pointer appearance-none rounded-xl border border-line bg-[#fafbfc] py-2.5 pr-9 pl-3 text-[0.85rem] font-medium text-ink outline-none focus:border-fuel"
-              >
-                <option value="">Search customer...</option>
-                {TX_CUSTOMERS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted" />
-            </div>
+            <SearchableCustomerFilter
+              value={draft.accid}
+              customers={customers}
+              onChange={(next) => setDraft((current) => ({ ...current, accid: next }))}
+            />
           </label>
 
-          <label className="flex flex-col gap-1.5">
+          <label className="flex min-w-0 flex-col gap-1.5">
             <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">Date Range</span>
-            <div className="relative">
-              <input
-                type="text"
-                readOnly
-                value={draft.dateLabel}
-                className="w-full rounded-xl border border-line bg-[#fafbfc] py-2.5 pr-10 pl-3 text-[0.85rem] font-medium text-ink outline-none"
-              />
-              <svg
-                className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                aria-hidden="true"
-              >
-                <rect x="3.5" y="5" width="17" height="15" rx="2" stroke="currentColor" strokeWidth="1.6" />
-                <path d="M8 3.5v3M16 3.5v3M3.5 9.5h17" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
-            </div>
+            <DateRangeFilter
+              grouped
+              fullWidth
+              from={draft.dateFrom}
+              to={draft.dateTo}
+              onFromChange={(next) => {
+                const range = applyDateRange('from', next, draft.dateFrom, draft.dateTo)
+                setDraft((current) => ({ ...current, dateFrom: range.from, dateTo: range.to }))
+              }}
+              onToChange={(next) => {
+                const range = applyDateRange('to', next, draft.dateFrom, draft.dateTo)
+                setDraft((current) => ({ ...current, dateFrom: range.from, dateTo: range.to }))
+              }}
+            />
           </label>
 
-          <label className="flex flex-col gap-1.5">
+          <label className="relative z-10 flex min-w-0 flex-col gap-1.5 overflow-visible">
             <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">
               Transaction Type
             </span>
-            <div className="relative">
-              <select
-                value={draft.type}
-                onChange={(e) =>
-                  setDraft((f) => ({ ...f, type: e.target.value as Filters['type'] }))
-                }
-                className="w-full cursor-pointer appearance-none rounded-xl border border-line bg-[#fafbfc] py-2.5 pr-9 pl-3 text-[0.85rem] font-medium text-ink outline-none focus:border-fuel"
-              >
-                <option value="All">All Types</option>
-                <option value="Credit">Credit</option>
-                <option value="Debit">Debit</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted" />
-            </div>
+            <MenuFilter
+              fullWidth
+              icon="type"
+              value={draft.kind === 'all' ? '' : draft.kind}
+              placeholder="All Types"
+              ariaLabel="Filter by transaction type"
+              onChange={(next) =>
+                setDraft((current) => ({
+                  ...current,
+                  kind: next === 'credit' || next === 'debit' ? next : 'all',
+                }))
+              }
+              options={[
+                { value: '', label: 'All Types' },
+                { value: 'credit', label: 'Credit' },
+                { value: 'debit', label: 'Debit' },
+              ]}
+            />
           </label>
 
           <div className="flex items-end gap-2 sm:col-span-2 xl:col-span-1">
@@ -219,254 +310,245 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
         </div>
       </section>
 
-      {/* Summary — mobile 2x2 tinted */}
       <section className="lg:hidden" aria-label="Summary">
         <h2 className="mb-2.5 text-[1rem] font-extrabold tracking-[-0.01em] text-ink">Summary</h2>
         <div className="grid grid-cols-2 gap-2.5">
           <SummaryMobile
             tone="fuel"
             label="Total Transactions"
-            value={TX_SUMMARY.totalTransactions.value}
-            change="+12.5%"
-            changeUp
+            value={String(summary.totalTransactions)}
             icon="swap"
           />
           <SummaryMobile
             tone="credit"
             label="Total Credit"
-            value={`${TX_SUMMARY.totalCredit.value} PKR`}
-            change="+8.4%"
-            changeUp
+            value={summary.totalCredit}
+            isPkr
             icon="down"
           />
           <SummaryMobile
             tone="debit"
             label="Total Debit"
-            value={`${TX_SUMMARY.totalDebit.value} PKR`}
-            change="+6.2%"
-            changeUp={false}
+            value={summary.totalDebit}
+            isPkr
             icon="up"
           />
           <SummaryMobile
             tone="blue"
             label="Net Flow"
-            value={`${TX_SUMMARY.netFlow.value} PKR`}
-            change="+5.3%"
-            changeUp
+            value={summary.netFlow}
+            isPkr
             icon="wallet"
           />
         </div>
       </section>
 
-      {/* Summary — desktop row */}
       <section className="hidden grid-cols-4 gap-4 lg:grid" aria-label="Summary">
         <SummaryDesktop
           label="Total Transactions"
-          value={TX_SUMMARY.totalTransactions.value}
-          change={TX_SUMMARY.totalTransactions.change}
-          tone="up"
+          value={summary.totalTransactions.toLocaleString('en-US')}
           iconBg="bg-fuel text-ink"
           icon="swap"
         />
         <SummaryDesktop
           label="Total Credit"
-          value={`${TX_SUMMARY.totalCredit.value} PKR`}
-          change={TX_SUMMARY.totalCredit.change}
-          tone="up"
+          value={summary.totalCredit}
+          isPkr
           iconBg="bg-credit-bg text-credit"
           icon="down"
         />
         <SummaryDesktop
           label="Total Debit"
-          value={`${TX_SUMMARY.totalDebit.value} PKR`}
-          change={TX_SUMMARY.totalDebit.change}
-          tone="down"
+          value={summary.totalDebit}
+          isPkr
           iconBg="bg-debit-bg text-debit"
           icon="up"
         />
         <SummaryDesktop
           label="Net Flow"
-          value={`${TX_SUMMARY.netFlow.value} PKR`}
-          change={TX_SUMMARY.netFlow.change}
-          tone="up"
+          value={summary.netFlow}
+          isPkr
           iconBg="bg-[#e8f0fe] text-[#2563eb]"
           icon="wallet"
         />
       </section>
 
-      {/* List / Table */}
       <section className={`${panel} rounded-2xl p-4 lg:p-5`} aria-label="All transactions">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="m-0 text-[1rem] font-extrabold tracking-[-0.01em] text-ink">
             All Transactions
           </h2>
-          <div className="hidden items-center gap-3 lg:flex">
-            <span className="text-[0.78rem] font-medium text-muted">
-              Showing {showingFrom} to {showingTo} of {total} transactions
-            </span>
-            <div className="relative">
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value) as (typeof PAGE_SIZE_OPTIONS)[number])
-                  setPage(1)
-                }}
-                className="cursor-pointer appearance-none rounded-lg border border-line bg-[#fafbfc] py-1.5 pr-8 pl-2.5 text-[0.78rem] font-semibold text-ink outline-none"
-              >
-                {PAGE_SIZE_OPTIONS.map((n) => (
-                  <option key={n} value={n}>
-                    {n} / page
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-muted" size={14} />
-            </div>
-          </div>
         </div>
 
-        {/* Mobile cards */}
-        <ul className="m-0 flex list-none flex-col p-0 lg:hidden">
-          {pageRows.map((row) => (
-            <MobileTxCard
-              key={row.id}
-              row={row}
-              menuOpen={openMenuId === row.id}
-              onToggleMenu={() => setOpenMenuId((id) => (id === row.id ? null : row.id))}
-            />
-          ))}
-          {pageRows.length === 0 && (
-            <li className="py-10 text-center text-sm font-medium text-muted">No transactions found.</li>
-          )}
-        </ul>
+        {loading && rows.length === 0 ? (
+          <LoadingHint label="Loading transactions…" />
+        ) : total === 0 ? (
+          <p className="my-10 text-center text-sm font-semibold text-muted">No transactions found.</p>
+        ) : (
+          <>
+            <ul className="m-0 flex list-none flex-col p-0 lg:hidden">
+              {rows.map((row, index) => (
+                <MobileTxCard
+                  key={row.trid}
+                  row={row}
+                  cardRef={index % TX_CHUNK === 4 ? afterFiveMobileRef : undefined}
+                  menuOpen={openMenuId === row.trid}
+                  canView={canViewCustomer}
+                  onToggleMenu={() => setOpenMenuId((id) => (id === row.trid ? null : row.trid))}
+                  onView={() => openCustomer(row)}
+                />
+              ))}
+              <div ref={mobileSentinelRef} className="h-4 shrink-0" />
+            </ul>
 
-        {/* Desktop table */}
-        <div className="-mx-1 hidden overflow-x-auto lg:block">
-          <table className="w-full min-w-[1080px] border-collapse">
-            <thead>
-              <tr>
-                <Th>ID</Th>
-                <Th>
-                  <button
-                    type="button"
-                    onClick={toggleSort}
-                    className="inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-[0.72rem] font-bold tracking-[0.04em] text-muted uppercase"
-                  >
-                    Date &amp; Time
-                    <SortIcon dir={sortDir} />
-                  </button>
-                </Th>
-                <Th>Customer</Th>
-                <Th>Type</Th>
-                <Th>Product / Service</Th>
-                <Th>Amount (PKR)</Th>
-                <Th>Balance (PKR)</Th>
-                <Th>Reference No.</Th>
-                <Th>Created By</Th>
-                <Th>Action</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {pageRows.map((row) => {
-                const isCredit = row.type === 'Credit'
-                return (
-                  <tr key={row.id} className="hover:bg-[#fcfcfd]">
-                    <Td className="font-semibold text-ink">{row.id}</Td>
-                    <Td>{row.when}</Td>
-                    <Td>{row.customer}</Td>
-                    <Td>
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-[0.72rem] font-bold ${
-                          isCredit ? 'bg-credit-bg text-credit' : 'bg-debit-bg text-debit'
-                        }`}
+            <div className="hidden min-w-0 lg:block">
+              <table className="w-full table-fixed border-collapse">
+                <colgroup>
+                  <col className="w-[11%]" />
+                  <col className="w-[14%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[22%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[8%]" />
+                  {canViewCustomer ? <col className="w-[5%]" /> : null}
+                </colgroup>
+                <thead>
+                  <tr>
+                    <Th>
+                      <button
+                        type="button"
+                        onClick={toggleSort}
+                        className="inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase"
                       >
-                        {row.type}
-                      </span>
-                    </Td>
-                    <Td>{row.product}</Td>
-                    <Td className={`font-bold ${isCredit ? 'text-credit' : 'text-debit'}`}>
-                      {row.amount}
-                    </Td>
-                    <Td>{row.balance}</Td>
-                    <Td>{row.reference}</Td>
-                    <Td>{row.by}</Td>
-                    <Td>
-                      <div className="relative">
-                        <button
-                          type="button"
-                          className="rounded-lg border-0 bg-transparent px-2 py-1 font-extrabold tracking-widest text-muted hover:bg-[#f3f4f6] hover:text-ink"
-                          aria-label={`Actions for ${row.id}`}
-                          onClick={() => setOpenMenuId((id) => (id === row.id ? null : row.id))}
-                        >
-                          ···
-                        </button>
-                        {openMenuId === row.id && (
-                          <div className="absolute right-0 z-10 mt-1 min-w-[8.5rem] overflow-hidden rounded-xl border border-line bg-white py-1 shadow-[0_12px_28px_rgba(26,29,33,0.14)]">
-                            <button
-                              type="button"
-                              className="block w-full border-0 bg-transparent px-3.5 py-2 text-left text-[0.8rem] font-semibold text-ink hover:bg-[#f7f8fa]"
-                              onClick={() => setOpenMenuId(null)}
-                            >
-                              View
-                            </button>
-                            <button
-                              type="button"
-                              className="block w-full border-0 bg-transparent px-3.5 py-2 text-left text-[0.8rem] font-semibold text-ink hover:bg-[#f7f8fa]"
-                              onClick={() => setOpenMenuId(null)}
-                            >
-                              Export
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </Td>
+                        Date
+                        <SortIcon dir={sort === 'oldest' ? 'asc' : 'desc'} />
+                      </button>
+                    </Th>
+                    <Th>Customer</Th>
+                    <Th>Type</Th>
+                    <Th>Product / Service</Th>
+                    <Th>Amount</Th>
+                    <Th>Balance</Th>
+                    <Th>Reference No.</Th>
+                    <Th>Created By</Th>
+                    {canViewCustomer ? <Th>Action</Th> : null}
                   </tr>
-                )
-              })}
-              {pageRows.length === 0 && (
-                <tr>
-                  <td colSpan={10} className="py-12 text-center text-sm font-medium text-muted">
-                    No transactions found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {rows.map((row, index) => {
+                    const isCredit = row.type === 'Credit'
+                    return (
+                      <tr
+                        key={row.trid}
+                        ref={index % TX_CHUNK === 4 ? afterFiveDesktopRef : undefined}
+                        className="hover:bg-[#fcfcfd]"
+                      >
+                        <Td>
+                          <span className="block leading-snug break-words">{dateOnly(row.when)}</span>
+                        </Td>
+                        <Td className="min-w-0 font-semibold text-ink">
+                          <span className="line-clamp-2 break-words" title={row.customer}>
+                            {row.customer}
+                          </span>
+                        </Td>
+                        <Td>
+                          <span
+                            className={`inline-flex rounded-full px-2 py-0.5 text-[0.65rem] font-bold ${
+                              isCredit ? 'bg-credit-bg text-credit' : 'bg-debit-bg text-debit'
+                            }`}
+                          >
+                            {row.type}
+                          </span>
+                        </Td>
+                        <Td className="min-w-0">
+                          <span className="line-clamp-2 break-words" title={row.product}>
+                            {row.product}
+                          </span>
+                        </Td>
+                        <Td className={isCredit ? 'font-bold text-credit' : 'font-bold text-debit'}>
+                          <PkrCell value={row.amount} />
+                        </Td>
+                        <Td className="font-bold">
+                          <PkrCell value={row.balance} />
+                        </Td>
+                        <Td>
+                          <span className="block truncate" title={row.reference}>
+                            {row.reference}
+                          </span>
+                        </Td>
+                        <Td>
+                          <span className="block break-words leading-snug">{row.by}</span>
+                        </Td>
+                        {canViewCustomer ? (
+                          <Td>
+                            <div className="relative">
+                              <button
+                                type="button"
+                                className="rounded-lg border-0 bg-transparent px-1.5 py-1 font-extrabold tracking-widest text-muted hover:bg-[#f3f4f6] hover:text-ink"
+                                aria-label={`Actions for ${row.customer}`}
+                                onClick={() => setOpenMenuId((id) => (id === row.trid ? null : row.trid))}
+                              >
+                                ···
+                              </button>
+                              {openMenuId === row.trid ? (
+                                <div className="absolute right-0 z-10 mt-1 min-w-[8.5rem] overflow-hidden rounded-xl border border-line bg-white py-1 shadow-[0_12px_28px_rgba(26,29,33,0.14)]">
+                                  <button
+                                    type="button"
+                                    className="block w-full border-0 bg-transparent px-3.5 py-2 text-left text-[0.8rem] font-semibold text-ink hover:bg-[#f7f8fa]"
+                                    onClick={() => openCustomer(row)}
+                                  >
+                                    View
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
+                          </Td>
+                        ) : null}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              <div ref={desktopSentinelRef} className="h-4" />
+            </div>
 
-        {/* Pagination */}
-        {total > 0 && (
-          <div className="mt-4 flex items-center justify-center gap-1 lg:justify-end">
-            <PagerBtn
-              disabled={safePage <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              ariaLabel="Previous page"
-            >
-              ‹
-            </PagerBtn>
-            {pageNumbers().map((n, i) =>
-              n === '…' ? (
-                <span key={`e-${i}`} className="px-1.5 text-sm text-muted">
-                  …
-                </span>
-              ) : (
+            {totalPages > 1 ? (
+              <div className="mt-4 flex items-center justify-center gap-1 lg:justify-end">
                 <PagerBtn
-                  key={n}
-                  active={n === safePage}
-                  onClick={() => setPage(n)}
-                  ariaLabel={`Page ${n}`}
+                  disabled={safePage <= 1}
+                  onClick={() => goToPage(Math.max(1, safePage - 1))}
+                  ariaLabel="Previous page"
                 >
-                  {n}
+                  ‹
                 </PagerBtn>
-              ),
-            )}
-            <PagerBtn
-              disabled={safePage >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              ariaLabel="Next page"
-            >
-              ›
-            </PagerBtn>
-          </div>
+                {pageNumbers().map((n, i) =>
+                  n === '…' ? (
+                    <span key={`e-${i}`} className="px-1.5 text-sm text-muted">
+                      …
+                    </span>
+                  ) : (
+                    <PagerBtn
+                      key={n}
+                      active={n === safePage}
+                      onClick={() => goToPage(n)}
+                      ariaLabel={`Page ${n}`}
+                    >
+                      {n}
+                    </PagerBtn>
+                  ),
+                )}
+                <PagerBtn
+                  disabled={safePage >= totalPages}
+                  onClick={() => goToPage(Math.min(totalPages, safePage + 1))}
+                  ariaLabel="Next page"
+                >
+                  ›
+                </PagerBtn>
+              </div>
+            ) : null}
+          </>
         )}
       </section>
     </div>
@@ -475,20 +557,26 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
 
 function MobileTxCard({
   row,
+  cardRef,
   menuOpen,
+  canView,
   onToggleMenu,
+  onView,
 }: {
   row: TransactionRow
+  cardRef?: Ref<HTMLLIElement>
   menuOpen: boolean
+  canView: boolean
   onToggleMenu: () => void
+  onView: () => void
 }) {
   const isCredit = row.type === 'Credit'
   return (
-    <li className="border-b border-[#ECEEF2] py-3.5 last:border-b-0">
+    <li ref={cardRef} className="border-b border-[#ECEEF2] py-3.5 last:border-b-0">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="m-0 text-[0.88rem] font-extrabold text-ink">{row.id}</p>
-          <p className="mt-0.5 mb-0 text-[0.72rem] font-medium text-muted">{row.when}</p>
+          <p className="m-0 truncate text-[0.88rem] font-extrabold text-ink">{row.customer}</p>
+          <p className="mt-0.5 mb-0 text-[0.72rem] font-medium text-muted">{dateOnly(row.when)}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <span
@@ -498,32 +586,33 @@ function MobileTxCard({
           >
             {row.type}
           </span>
-          <div className="relative">
-            <button
-              type="button"
-              className="rounded border-0 bg-transparent px-1.5 py-0.5 font-extrabold tracking-widest text-muted"
-              aria-label="Actions"
-              onClick={onToggleMenu}
-            >
-              ···
-            </button>
-            {menuOpen && (
-              <div className="absolute right-0 z-10 mt-1 min-w-[7.5rem] overflow-hidden rounded-xl border border-line bg-white py-1 shadow-[0_12px_28px_rgba(26,29,33,0.14)]">
-                <button
-                  type="button"
-                  className="block w-full border-0 bg-transparent px-3 py-2 text-left text-[0.8rem] font-semibold"
-                  onClick={onToggleMenu}
-                >
-                  View
-                </button>
-              </div>
-            )}
-          </div>
+          {canView ? (
+            <div className="relative">
+              <button
+                type="button"
+                className="rounded border-0 bg-transparent px-1.5 py-0.5 font-extrabold tracking-widest text-muted"
+                aria-label="Actions"
+                onClick={onToggleMenu}
+              >
+                ···
+              </button>
+              {menuOpen ? (
+                <div className="absolute right-0 z-10 mt-1 min-w-[7.5rem] overflow-hidden rounded-xl border border-line bg-white py-1 shadow-[0_12px_28px_rgba(26,29,33,0.14)]">
+                  <button
+                    type="button"
+                    className="block w-full border-0 bg-transparent px-3 py-2 text-left text-[0.8rem] font-semibold"
+                    onClick={onView}
+                  >
+                    View
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
       <div className="mt-2.5 flex items-end justify-between gap-3">
         <div className="min-w-0">
-          <p className="m-0 truncate text-[0.9rem] font-bold text-ink">{row.customer}</p>
           <p className="mt-0.5 mb-0 truncate text-[0.75rem] font-medium text-muted">{row.product}</p>
         </div>
         <div className="shrink-0 text-right">
@@ -532,10 +621,10 @@ function MobileTxCard({
               isCredit ? 'text-credit' : 'text-debit'
             }`}
           >
-            {row.amount} PKR
+            <PkrValue value={row.amount} amountClass="font-extrabold" />
           </p>
           <p className="mt-1.5 mb-0 text-[0.68rem] font-medium text-muted">
-            Balance: {row.balance} PKR
+            Balance: <PkrValue value={row.balance} className="inline text-[0.68rem]" />
           </p>
         </div>
       </div>
@@ -547,15 +636,13 @@ function SummaryMobile({
   tone,
   label,
   value,
-  change,
-  changeUp,
+  isPkr,
   icon,
 }: {
   tone: 'fuel' | 'credit' | 'debit' | 'blue'
   label: string
-  value: string
-  change: string
-  changeUp: boolean
+  value: string | number
+  isPkr?: boolean
   icon: 'swap' | 'down' | 'up' | 'wallet'
 }) {
   const bg =
@@ -582,12 +669,11 @@ function SummaryMobile({
       </div>
       <p className="m-0 text-[0.7rem] font-semibold text-muted">{label}</p>
       <p className="mt-1 mb-0 text-[0.95rem] font-extrabold leading-tight tracking-[-0.02em] text-ink">
-        {value}
-      </p>
-      <p
-        className={`mt-1 mb-0 text-[0.68rem] font-bold ${changeUp ? 'text-credit' : 'text-debit'}`}
-      >
-        {change}
+        {isPkr && typeof value === 'number' ? (
+          <PkrValue value={value} amountClass="font-extrabold" />
+        ) : (
+          value
+        )}
       </p>
     </article>
   )
@@ -596,15 +682,13 @@ function SummaryMobile({
 function SummaryDesktop({
   label,
   value,
-  change,
-  tone,
+  isPkr,
   iconBg,
   icon,
 }: {
   label: string
-  value: string
-  change: string
-  tone: 'up' | 'down'
+  value: string | number
+  isPkr?: boolean
   iconBg: string
   icon: 'swap' | 'down' | 'up' | 'wallet'
 }) {
@@ -615,16 +699,13 @@ function SummaryDesktop({
       </div>
       <div className="min-w-0">
         <p className="m-0 text-[0.78rem] font-semibold text-muted">{label}</p>
-        <h3 className="mt-1 mb-1 text-[1.15rem] font-extrabold tracking-[-0.02em] text-ink whitespace-nowrap">
-          {value}
+        <h3 className="mt-1 mb-0 text-[1.15rem] font-extrabold tracking-[-0.02em] text-ink whitespace-nowrap">
+          {isPkr && typeof value === 'number' ? (
+            <PkrValue value={value} amountClass="font-extrabold" />
+          ) : (
+            value
+          )}
         </h3>
-        <span
-          className={`block text-[0.72rem] font-semibold ${
-            tone === 'up' ? 'text-credit' : 'text-debit'
-          }`}
-        >
-          {change}
-        </span>
       </div>
     </article>
   )
@@ -632,7 +713,7 @@ function SummaryDesktop({
 
 function Th({ children }: { children: ReactNode }) {
   return (
-    <th className="border-b border-line px-2.5 py-3 text-left text-[0.72rem] font-bold tracking-[0.04em] text-muted uppercase whitespace-nowrap">
+    <th className="border-b border-line px-2 py-3 text-left text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase">
       {children}
     </th>
   )
@@ -647,7 +728,7 @@ function Td({
 }) {
   return (
     <td
-      className={`border-b border-[#f1f2f4] px-2.5 py-3.5 text-[0.84rem] whitespace-nowrap text-[#374151] ${className}`}
+      className={`border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151] ${className}`}
     >
       {children}
     </td>
@@ -681,14 +762,6 @@ function PagerBtn({
     >
       {children}
     </button>
-  )
-}
-
-function ChevronDown({ className = '', size = 16 }: { className?: string; size?: number }) {
-  return (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
   )
 }
 
