@@ -7,6 +7,7 @@ const NAV_BASE: NavItem[] = [
   { id: 'debit', label: 'Debit', icon: 'debit', path: '/debit' },
   { id: 'transactions', label: 'Transactions', icon: 'swap', path: '/transactions' },
   { id: 'reports', label: 'Reports', icon: 'doc', path: '/reports' },
+  { id: 'chartOfAccounts', label: 'Chart of Accounts', icon: 'ledger', path: '/chart-of-accounts' },
 ]
 
 const BOTTOM_BASE = [
@@ -32,11 +33,19 @@ export function buildNav(role: PortalRole): NavItem[] {
       ? NAV_BASE
       : role === 'Accountant'
         ? NAV_BASE.filter((n) =>
-            ['dashboard', 'customers', 'credit', 'debit', 'transactions', 'reports'].includes(
-              n.id,
-            ),
+            [
+              'dashboard',
+              'customers',
+              'credit',
+              'debit',
+              'transactions',
+              'reports',
+              'chartOfAccounts',
+            ].includes(n.id),
           )
-        : NAV_BASE.filter((n) => ['dashboard', 'transactions', 'reports'].includes(n.id))
+        : NAV_BASE.filter((n) =>
+            ['dashboard', 'transactions', 'reports', 'chartOfAccounts'].includes(n.id),
+          )
 
   return allowed.map((item) => ({
     ...item,

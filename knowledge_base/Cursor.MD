@@ -165,7 +165,20 @@ Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info
 - Desktop: filters (+ product), Export, Generate, 4 KPIs, Top Customers + Product summary tables
 - Mobile: filters (no product), Generate, 2×2 KPIs, Recent Transactions
 - Charts removed: Credit vs Debit, Daily Net Flow
-- Wired in `DashboardShell` when `active === 'reports'`; bottom nav **More** → **Reports**
+- Wired in `DashboardShell` when `active === 'reports'`; bottom nav **Reports**
+
+## Chart of Accounts (sidebar item under Reports) — 2026-08-26
+- Separate sidebar nav item **below Reports** (not a tab inside Reports)
+- Routes: `/chart-of-accounts`, `/accountant/chart-of-accounts`, `/user/chart-of-accounts`
+- Files: `ChartOfAccountsPage.tsx`, `chartOfAccountsData.ts`
+- 3-step drill-down: Charts → Sub Charts → Accounts
+- Breadcrumbs + Back; mobile cards + desktop tables; FuelLedger theme dummy data
+
+## Merge conflict resolve (2026-08-27, Chart of Accounts + company brand)
+- Unmerged: `src/dashboard/DashboardShell.tsx` on `feature/CustomerPage`.
+- Working tree had dropped both import blocks while the body still used company helpers and `ChartOfAccountsPage`.
+- Resolution: keep HEAD company brand (`./company`, pageCache, nested Customers tab, logout menus) **and** incoming `ChartOfAccountsPage` import/route.
+- Staged; merge commit not created unless requested.
 
 ## Agent notes
 - Multiple agents: read this file before work; update after meaningful changes.

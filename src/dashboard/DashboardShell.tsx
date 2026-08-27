@@ -12,6 +12,7 @@ import { CreditPage } from './CreditPage'
 import { DebitPage } from './DebitPage'
 import { clearPageCache, prefetchDashboardPages } from './pageCache'
 import { ReportsPage } from './ReportsPage'
+import { ChartOfAccountsPage } from './ChartOfAccountsPage'
 import {
   FALLBACK_COMPANY,
   loadCompany,
@@ -411,7 +412,9 @@ export function DashboardShell({ config }: Props) {
           ) : active === 'debit' ? (
             <DebitPage homePath={homePath} txPath={txPath} searchQuery={query} />
           ) : active === 'reports' ? (
-            <ReportsPage homePath={homePath} txPath={txPath} />
+            <ReportsPage homePath={homePath} txPath={txPath} searchQuery={query} />
+          ) : active === 'chartOfAccounts' ? (
+            <ChartOfAccountsPage homePath={homePath} searchQuery={query} />
           ) : showSection ? (
             <SectionPlaceholder title={activeLabel} path={activePath} />
           ) : (

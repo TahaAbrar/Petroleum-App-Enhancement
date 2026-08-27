@@ -58,6 +58,14 @@ export function NavIcon({ name }: { name: string }) {
           <path d="M14 3v5h5M8 13h8M8 17h6" />
         </svg>
       )
+    case 'ledger':
+      return (
+        <svg {...strokeProps}>
+          <path d="M6 4h11a2 2 0 0 1 2 2v14H8a2 2 0 0 1-2-2V4Z" />
+          <path d="M6 4a2 2 0 0 0-2 2v12" />
+          <path d="M10 9h7M10 13h7M10 17h4" />
+        </svg>
+      )
     case 'gear':
       return (
         <svg {...strokeProps}>
