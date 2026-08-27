@@ -6,10 +6,25 @@ import {
   type CustomerGroup,
   type CustomerStatus,
 } from './customers'
-import { TX_SUMMARY, type TransactionRow } from './transactionsData'
+import {
+  fetchBalanceTrend,
+  fetchCreditDebitChart,
+  fetchDashboardStats,
+} from './dashboard'
+import {
+  fetchKindStats,
+  fetchTransactionCustomers,
+  fetchTransactions,
+  type TransactionCustomer,
+  type TransactionListParams,
+  type TransactionRow,
+  type TransactionSummary,
+} from './transactions'
 
 export const CUSTOMER_BATCH = 40
 export const CUSTOMER_CHUNK = 15
+export const TX_PAGE_SIZE = 50
+export const TX_CHUNK = 15
 
 export type CustomerListParams = {
   q?: string
@@ -27,16 +42,26 @@ export const EMPTY_CUSTOMER_FILTERS: CustomerListParams = {
   type: '',
 }
 
+export const EMPTY_TX_FILTERS: TransactionListParams = {
+  q: '',
+  accid: '',
+  dateFrom: '',
+  dateTo: '',
+  kind: 'all',
+  sort: 'recent',
+}
+
 type CustomerListEntry = {
   customers: Customer[]
   total: number
   at: number
 }
 
-type TxPageCache = {
+type TxPageEntry = {
   rows: TransactionRow[]
-  summary: typeof TX_SUMMARY
-  customers: string[]
+  total: number
+  page: number
+  summary: TransactionSummary
   at: number
 }
 
@@ -44,8 +69,10 @@ const listCache = new Map<string, CustomerListEntry>()
 const listInflight = new Map<string, Promise<{ customers: Customer[]; total: number; page: number }>>()
 let groupsCache: { groups: CustomerGroup[]; at: number } | null = null
 let groupsInflight: Promise<CustomerGroup[]> | null = null
-let txCache: TxPageCache | null = null
-let txInflight: Promise<TxPageCache> | null = null
+const txCache = new Map<string, TxPageEntry>()
+const txInflight = new Map<string, Promise<TxPageEntry>>()
+let txCustomersCache: { customers: TransactionCustomer[]; at: number } | null = null
+let txCustomersInflight: Promise<TransactionCustomer[]> | null = null
 
 export function customerListKey(params: CustomerListParams) {
   return JSON.stringify({
@@ -57,6 +84,17 @@ export function customerListKey(params: CustomerListParams) {
   })
 }
 
+export function transactionListKey(params: TransactionListParams) {
+  return JSON.stringify({
+    q: params.q?.trim() ?? '',
+    accid: params.accid || '',
+    dateFrom: params.dateFrom ?? '',
+    dateTo: params.dateTo ?? '',
+    kind: params.kind ?? 'all',
+    sort: params.sort ?? 'recent',
+  })
+}
+
 export function peekCustomerList(params: CustomerListParams) {
   return listCache.get(customerListKey(params)) ?? null
 }
@@ -65,8 +103,12 @@ export function peekCustomerGroups() {
   return groupsCache?.groups ?? null
 }
 
-export function peekTransactions() {
-  return txCache
+export function peekTransactions(params: TransactionListParams = EMPTY_TX_FILTERS, page = 1) {
+  return txCache.get(`${transactionListKey(params)}:${page}`) ?? null
+}
+
+export function peekTransactionCustomers() {
+  return txCustomersCache?.customers ?? null
 }
 
 export function clearPageCache() {
@@ -74,8 +116,10 @@ export function clearPageCache() {
   listInflight.clear()
   groupsCache = null
   groupsInflight = null
-  txCache = null
-  txInflight = null
+  txCache.clear()
+  txInflight.clear()
+  txCustomersCache = null
+  txCustomersInflight = null
 }
 
 export function prefetchDashboardPages() {
@@ -84,7 +128,13 @@ export function prefetchDashboardPages() {
     void loadCustomerListPage(EMPTY_CUSTOMER_FILTERS, 1, { force: true })
     void loadCustomerGroups({ force: true })
   }
-  void loadTransactionsPage({ force: true })
+  void loadTransactionCustomers({ force: true })
+  void loadTransactionsPage(EMPTY_TX_FILTERS, 1, { force: true })
+  void fetchDashboardStats().catch(() => {})
+  void fetchCreditDebitChart().catch(() => {})
+  void fetchBalanceTrend('7d').catch(() => {})
+  void fetchKindStats('credit').catch(() => {})
+  void fetchKindStats('debit').catch(() => {})
 }
 
 export async function loadCustomerGroups(opts?: { force?: boolean }) {
@@ -153,19 +203,60 @@ export async function loadCustomerListPage(
   }
 }
 
-export async function loadTransactionsPage(opts?: { force?: boolean }) {
-  if (!opts?.force && txCache) return txCache
-  if (txInflight) return txInflight
-  txInflight = import('./transactionsData').then((mod) => {
-    txCache = {
-      rows: mod.ALL_TRANSACTIONS,
-      summary: mod.TX_SUMMARY,
-      customers: mod.TX_CUSTOMERS,
+export async function loadTransactionCustomers(opts?: { force?: boolean }) {
+  if (!opts?.force && txCustomersCache) return txCustomersCache.customers
+  if (txCustomersInflight) return txCustomersInflight
+  txCustomersInflight = fetchTransactionCustomers()
+    .then((customers) => {
+      txCustomersCache = { customers, at: Date.now() }
+      return customers
+    })
+    .finally(() => {
+      txCustomersInflight = null
+    })
+  return txCustomersInflight
+}
+
+export async function loadTransactionsPage(
+  params: TransactionListParams,
+  page: number,
+  opts?: { force?: boolean },
+) {
+  const inflightKey = `${transactionListKey(params)}:${page}`
+  const cached = txCache.get(inflightKey)
+  if (!opts?.force && cached) {
+    const existing = txInflight.get(inflightKey)
+    if (existing) return existing
+    return cached
+  }
+  const existing = txInflight.get(inflightKey)
+  if (existing) return existing
+
+  const request = fetchTransactions({
+    q: params.q,
+    accid: params.accid || undefined,
+    dateFrom: params.dateFrom || undefined,
+    dateTo: params.dateTo || undefined,
+    kind: params.kind,
+    sort: params.sort,
+    page,
+    pageSize: TX_PAGE_SIZE,
+  }).then((data) => {
+    const entry: TxPageEntry = {
+      rows: data.transactions,
+      total: data.total,
+      page: data.page,
+      summary: data.summary,
       at: Date.now(),
     }
-    return txCache
-  }).finally(() => {
-    txInflight = null
+    txCache.set(inflightKey, entry)
+    return entry
   })
-  return txInflight
+
+  txInflight.set(inflightKey, request)
+  try {
+    return await request
+  } finally {
+    txInflight.delete(inflightKey)
+  }
 }

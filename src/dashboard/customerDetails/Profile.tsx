@@ -1,7 +1,6 @@
 import {
   displayText,
   formatFilterDate,
-  formatPkr,
   type CustomerDetail,
 } from '../customers'
 import { CustomerMark } from '../icons'
@@ -13,6 +12,7 @@ import {
   IdChip,
   InfoIconCard,
   MiniStat,
+  PkrValue,
   StatusPill,
   SummaryCard,
 } from './ui'
@@ -89,13 +89,13 @@ export function CustomerDetailsProfile({ view, detailLoading, onBack }: Props) {
           <div className="hidden gap-3 lg:flex">
             <BalanceChip
               label="Opening Balance"
-              value={formatPkr(view.openingBalance)}
+              value={view.openingBalance}
               icon="wallet"
               tone="muted"
             />
             <BalanceChip
               label="Closing Balance"
-              value={formatPkr(view.currentBalance)}
+              value={view.currentBalance}
               icon="wallet"
               tone={view.currentBalance < 0 ? 'debit' : 'credit'}
             />
@@ -106,13 +106,13 @@ export function CustomerDetailsProfile({ view, detailLoading, onBack }: Props) {
       <div className="flex flex-col gap-2.5 lg:hidden">
         <BalanceCard
           label="Opening Balance"
-          value={formatPkr(view.openingBalance)}
+          value={view.openingBalance}
           valueClass="text-ink"
           iconTone="fuel"
         />
         <BalanceCard
           label="Closing Balance"
-          value={formatPkr(view.currentBalance)}
+          value={view.currentBalance}
           valueClass={view.currentBalance < 0 ? 'text-debit' : 'text-credit'}
           iconTone="amber"
         />
@@ -155,14 +155,19 @@ export function CustomerDetailsProfile({ view, detailLoading, onBack }: Props) {
               icon="clipboard"
               iconTone="orange"
               label="Opening Balance"
-              value={formatPkr(view.openingBalance)}
+              valueNode={<PkrValue value={view.openingBalance} amountClass="font-bold" />}
             />
             <InfoIconCard
               icon="down"
               iconTone="credit"
               label="Closing Balance"
-              value={formatPkr(view.currentBalance)}
-              valueTone={view.currentBalance < 0 ? 'debit' : 'credit'}
+              valueNode={
+                <PkrValue
+                  value={view.currentBalance}
+                  amountClass="font-bold"
+                  className={view.currentBalance < 0 ? 'text-debit' : 'text-credit'}
+                />
+              }
             />
             <InfoIconCard
               icon="note"
@@ -185,13 +190,15 @@ export function CustomerDetailsProfile({ view, detailLoading, onBack }: Props) {
           <div className="flex flex-col gap-2.5">
             <SummaryCard
               label="Total Credit"
-              value={detailLoading ? '…' : formatPkr(view.totalCredit)}
+              value={detailLoading ? '…' : view.totalCredit}
+              isPkr={!detailLoading}
               tone="credit"
               icon="down"
             />
             <SummaryCard
               label="Total Debit"
-              value={detailLoading ? '…' : formatPkr(view.totalDebit)}
+              value={detailLoading ? '…' : view.totalDebit}
+              isPkr={!detailLoading}
               tone="debit"
               icon="up"
             />

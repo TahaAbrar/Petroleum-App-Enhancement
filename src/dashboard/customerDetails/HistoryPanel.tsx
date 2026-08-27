@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react'
-import { formatPkr, type HistoryKind, type HistorySort } from '../customers'
+import { type HistoryKind, type HistorySort } from '../customers'
 import { applyDateRange, DateRangeFilter } from '../filters'
 import { LoadingHint } from '../loading'
 import { panel } from '../styles'
 import type { CustomerHistoryState } from './useCustomerHistory'
-import { PkrCell, Td, TypeBadge, WhenCell } from './ui'
+import { PkrCell, PkrValue, Td, TypeBadge, WhenCell } from './ui'
 
 const TABS = [
   ['all', 'Transaction History'],
@@ -163,7 +163,7 @@ export function CustomerHistoryPanel({
                 }`}
               >
                 {row.type === 'Credit' ? '+' : '-'}
-                {formatPkr(row.amount)}
+                <PkrValue value={row.amount} amountClass="font-extrabold" />
               </p>
             </div>
           </li>

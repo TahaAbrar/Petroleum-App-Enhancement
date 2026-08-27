@@ -8,6 +8,8 @@ import { getPool } from './db.js'
 import { loginHandler, logoutHandler, meHandler } from './authRoutes.js'
 import { requireAuth, requireReadKey, requireRoles } from './middleware.js'
 import { customerRouter } from './customerRoutes.js'
+import { transactionRouter } from './transactionRoutes.js'
+import { dashboardRouter } from './dashboardRoutes.js'
 
 const app = express()
 
@@ -69,6 +71,35 @@ app.use(
   customerRouter,
 )
 
+const transactionLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    ok: false,
+    message: 'Too many transaction requests. Please wait and try again.',
+  },
+})
+
+app.use(
+  '/api/transactions',
+  transactionLimiter,
+  requireReadKey,
+  requireAuth,
+  requireRoles('Administrator', 'Accountant', 'User'),
+  transactionRouter,
+)
+
+app.use(
+  '/api/dashboard',
+  transactionLimiter,
+  requireReadKey,
+  requireAuth,
+  requireRoles('Administrator', 'Accountant', 'User'),
+  dashboardRouter,
+)
+
 app.all(/^\/api\/.*/, (_req, res) => {
   res.status(404).json({ ok: false, message: 'Not found' })
 })
@@ -84,7 +115,7 @@ app.use((err, _req, res, _next) => {
 async function start() {
   await getPool()
   app.listen(env.port, () => {
-    console.log(`[fuelledger-api] listening on :${env.port} (SELECT-only auth + customers)`)
+    console.log(`[fuelledger-api] listening on :${env.port} (SELECT-only auth + customers + transactions)`)
   })
 }
 

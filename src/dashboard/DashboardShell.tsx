@@ -72,6 +72,7 @@ export function DashboardShell({ config }: Props) {
 
   useEffect(() => {
     setProfileMenuOpen(false)
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
   }, [location.pathname])
 
   useEffect(() => {

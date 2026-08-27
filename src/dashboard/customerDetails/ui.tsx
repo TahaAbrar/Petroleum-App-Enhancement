@@ -1,6 +1,24 @@
 import type { ReactNode } from 'react'
 import type { Customer, CustomerTxType } from '../customers'
+import { formatPkrAmount } from '../customers'
 import { panel } from '../styles'
+
+export function PkrValue({
+  value,
+  amountClass = '',
+  className = '',
+}: {
+  value: number
+  amountClass?: string
+  className?: string
+}) {
+  return (
+    <span className={`tabular-nums ${className}`}>
+      <span className={amountClass}>{formatPkrAmount(value)}</span>{' '}
+      <span className="font-normal text-muted">PKR</span>
+    </span>
+  )
+}
 
 export function StatusPill({ status }: { status: Customer['status'] }) {
   const active = status === 'Active'
@@ -34,7 +52,7 @@ export function BalanceCard({
   iconTone,
 }: {
   label: string
-  value: string
+  value: number
   valueClass: string
   iconTone: 'fuel' | 'amber'
 }) {
@@ -49,8 +67,8 @@ export function BalanceCard({
       </div>
       <div className="min-w-0">
         <p className="m-0 text-[0.72rem] font-semibold text-muted">{label}</p>
-        <p className={`mt-0.5 mb-0 text-[1.05rem] font-extrabold tracking-[-0.02em] ${valueClass}`}>
-          {value}
+        <p className={`mt-0.5 mb-0 text-[1.05rem] tracking-[-0.02em] ${valueClass}`}>
+          <PkrValue value={value} amountClass="font-extrabold" />
         </p>
       </div>
     </article>
@@ -63,7 +81,7 @@ export function BalanceChip({
   tone,
 }: {
   label: string
-  value: string
+  value: number
   icon: string
   tone: 'muted' | 'credit' | 'debit'
 }) {
@@ -74,11 +92,11 @@ export function BalanceChip({
         <span className="text-[0.72rem] font-semibold text-muted">{label}</span>
       </div>
       <p
-        className={`m-0 text-[1.05rem] font-extrabold ${
+        className={`m-0 text-[1.05rem] ${
           tone === 'credit' ? 'text-credit' : tone === 'debit' ? 'text-debit' : 'text-ink'
         }`}
       >
-        {value}
+        <PkrValue value={value} amountClass="font-extrabold" />
       </p>
     </div>
   )
@@ -136,13 +154,15 @@ export function InfoIconCard({
   iconTone,
   label,
   value,
+  valueNode,
   valueTone,
   className = '',
 }: {
   icon: 'user' | 'phone' | 'email' | 'pin' | 'clipboard' | 'down' | 'note' | 'calendar'
   iconTone: IconTone
   label: string
-  value: string
+  value?: string
+  valueNode?: ReactNode
   valueTone?: 'credit' | 'debit'
   className?: string
 }) {
@@ -157,8 +177,8 @@ export function InfoIconCard({
       </div>
       <div className="min-w-0">
         <p className="m-0 text-[0.7rem] font-semibold text-muted">{label}</p>
-        <p
-          className={`mt-1 mb-0 text-[0.9rem] font-bold leading-snug break-words ${
+        <div
+          className={`mt-1 mb-0 text-[0.9rem] leading-snug break-words ${
             valueTone === 'credit'
               ? 'text-credit'
               : valueTone === 'debit'
@@ -166,8 +186,8 @@ export function InfoIconCard({
                 : 'text-ink'
           }`}
         >
-          {value}
-        </p>
+          {valueNode ?? <p className="m-0 font-bold">{value}</p>}
+        </div>
       </div>
     </article>
   )
@@ -178,11 +198,13 @@ export function SummaryCard({
   value,
   tone,
   icon,
+  isPkr,
 }: {
   label: string
-  value: string
+  value: string | number
   tone: 'credit' | 'debit' | 'blue'
   icon: 'down' | 'up' | 'doc'
+  isPkr?: boolean
 }) {
   const color =
     tone === 'credit' ? 'text-credit' : tone === 'debit' ? 'text-debit' : 'text-[#2563eb]'
@@ -195,7 +217,13 @@ export function SummaryCard({
       </div>
       <div className="min-w-0">
         <p className="m-0 text-[0.7rem] font-semibold text-muted">{label}</p>
-        <p className={`mt-1 mb-0 text-[0.95rem] font-extrabold ${color}`}>{value}</p>
+        <p className={`mt-1 mb-0 text-[0.95rem] ${color}`}>
+          {isPkr && typeof value === 'number' ? (
+            <PkrValue value={value} amountClass="font-extrabold" />
+          ) : (
+            <span className="font-extrabold">{value}</span>
+          )}
+        </p>
       </div>
     </article>
   )
@@ -215,17 +243,7 @@ export function WhenCell({ value }: { value: string }) {
 }
 
 export function PkrCell({ value }: { value: number }) {
-  const formatted = Math.abs(value).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-  return (
-    <span className="block leading-tight tabular-nums">
-      {value < 0 ? '-' : ''}
-      {formatted}
-      <span className="mt-0.5 block text-[0.62rem] font-semibold tracking-wide text-muted">PKR</span>
-    </span>
-  )
+  return <PkrValue value={value} className="block leading-tight text-[0.78rem] text-[#374151]" />
 }
 
 export function Td({ children, className = '' }: { children: ReactNode; className?: string }) {

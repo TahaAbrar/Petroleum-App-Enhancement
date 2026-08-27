@@ -4,13 +4,13 @@ import { toast } from '../toast'
 import {
   customerSlug,
   displayText,
-  formatPkr,
   type Customer,
   type CustomerGroup,
   type CustomerStatus,
 } from './customers'
 import { applyDateRange, DateRangeFilter, MenuFilter } from './filters'
 import { CustomerDetailsPage } from './CustomerDetailsPage'
+import { PkrValue } from './customerDetails/ui'
 import { CustomerMark } from './icons'
 import { LoadingHint } from './loading'
 import {
@@ -212,7 +212,7 @@ export function CustomersPage({ searchQuery = '' }: Props) {
 
   return (
     <>
-      <section className={`${panel} rounded-3xl p-4 lg:p-5`} aria-label="Customers">
+      <section className={`${panel} relative z-20 overflow-visible rounded-3xl p-4 lg:p-5`} aria-label="Customers">
         <div className="mb-4 flex flex-col gap-3.5 lg:mb-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <h1 className="m-0 text-[1.35rem] font-extrabold tracking-[-0.03em] text-ink lg:text-[1.5rem]">
@@ -222,7 +222,7 @@ export function CustomersPage({ searchQuery = '' }: Props) {
               Manage your all customers.
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-2 overflow-visible lg:flex lg:shrink-0 lg:flex-wrap lg:justify-end">
+          <div className="relative z-30 grid grid-cols-2 gap-2 overflow-visible lg:flex lg:shrink-0 lg:flex-wrap lg:justify-end">
             <DateRangeFilter
               from={dateFrom}
               to={dateTo}
@@ -294,7 +294,7 @@ export function CustomersPage({ searchQuery = '' }: Props) {
                             row.currentBalance < 0 ? 'text-debit' : 'text-credit'
                           }`}
                         >
-                          {formatPkr(row.currentBalance)}
+                          <PkrValue value={row.currentBalance} />
                         </p>
                         <StatusPill status={row.status} />
                       </div>
@@ -350,10 +350,10 @@ export function CustomersPage({ searchQuery = '' }: Props) {
                           row.currentBalance < 0 ? 'text-debit' : 'text-credit'
                         }`}
                       >
-                        {formatPkr(row.currentBalance)}
+                        <PkrValue value={row.currentBalance} />
                       </td>
                       <td className="border-b border-[#f1f2f4] px-2.5 py-3.5 text-[0.84rem] whitespace-nowrap text-[#374151]">
-                        {formatPkr(row.openingBalance)}
+                        <PkrValue value={row.openingBalance} />
                       </td>
                       <td className="border-b border-[#f1f2f4] px-2.5 py-3.5 whitespace-nowrap">
                         <StatusPill status={row.status} />

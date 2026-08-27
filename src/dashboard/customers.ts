@@ -71,12 +71,16 @@ export function displayText(value: string | null | undefined) {
   return s || '—'
 }
 
-export function formatPkr(value: number) {
+export function formatPkrAmount(value: number) {
   const formatted = Math.abs(value).toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
-  return `${value < 0 ? '-' : ''}${formatted} PKR`
+  return `${value < 0 ? '-' : ''}${formatted}`
+}
+
+export function formatPkr(value: number) {
+  return `${formatPkrAmount(value)} PKR`
 }
 
 export function formatFilterDate(iso: string) {
