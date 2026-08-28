@@ -11,6 +11,7 @@ import { customerRouter } from './customerRoutes.js'
 import { transactionRouter } from './transactionRoutes.js'
 import { dashboardRouter } from './dashboardRoutes.js'
 import { companyRouter } from './companyRoutes.js'
+import { coaRouter } from './coaRoutes.js'
 
 const app = express()
 
@@ -110,6 +111,15 @@ app.use(
   requireAuth,
   requireRoles('Administrator', 'Accountant', 'User'),
   companyRouter,
+)
+
+app.use(
+  '/api/chart-of-accounts',
+  transactionLimiter,
+  requireReadKey,
+  requireAuth,
+  requireRoles('Administrator', 'Accountant', 'User'),
+  coaRouter,
 )
 
 app.all(/^\/api\/.*/, (_req, res) => {

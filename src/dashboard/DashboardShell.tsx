@@ -45,9 +45,15 @@ export function DashboardShell({ config }: Props) {
 
   const { nav, bottomNav, homePath, txPath, roleLabel } = config
   const customersNav = nav.find((item) => item.id === 'customers')
+  const coaNav = nav.find((item) => item.id === 'chartOfAccounts')
   const active =
     nav.find((item) => {
       if (item.id === 'customers') {
+        return (
+          location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
+        )
+      }
+      if (item.id === 'chartOfAccounts') {
         return (
           location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
         )
@@ -326,7 +332,7 @@ export function DashboardShell({ config }: Props) {
             </svg>
             <input
               type="search"
-              placeholder={isCustomers ? 'Search customers...' : 'Search here...'}
+              placeholder={isCustomers ? 'Search accounts...' : 'Search here...'}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="w-full border-0 bg-transparent text-[0.9rem] text-ink outline-none"
@@ -414,7 +420,11 @@ export function DashboardShell({ config }: Props) {
           ) : active === 'reports' ? (
             <ReportsPage homePath={homePath} txPath={txPath} searchQuery={query} />
           ) : active === 'chartOfAccounts' ? (
-            <ChartOfAccountsPage homePath={homePath} searchQuery={query} />
+            <ChartOfAccountsPage
+              homePath={homePath}
+              coaPath={coaNav?.path ?? '/chart-of-accounts'}
+              searchQuery={query}
+            />
           ) : showSection ? (
             <SectionPlaceholder title={activeLabel} path={activePath} />
           ) : (

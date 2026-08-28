@@ -1,80 +1,171 @@
-import { useMemo, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { toast } from '../toast'
+import { CoaAccountLedgerPage } from './CoaAccountLedgerPage'
 import {
-  CHART_OF_ACCOUNTS,
+  fetchCoaAccounts,
+  fetchCoaCharts,
+  fetchCoaSubCharts,
   formatCoaPkr,
   type CoaAccount,
   type CoaChart,
   type CoaSubChart,
-} from './chartOfAccountsData'
+} from './chartOfAccounts'
+import { LoadingHint } from './loading'
 import { panel } from './styles'
 
 type Level = 'charts' | 'subCharts' | 'accounts'
 
+type CoaBackState = {
+  level: Level
+  chart: CoaChart
+  subChart: CoaSubChart
+}
+
 type Props = {
   homePath: string
+  coaPath: string
   searchQuery?: string
 }
 
-export function ChartOfAccountsPage({ homePath, searchQuery = '' }: Props) {
-  const [level, setLevel] = useState<Level>('charts')
-  const [chart, setChart] = useState<CoaChart | null>(null)
-  const [subChart, setSubChart] = useState<CoaSubChart | null>(null)
+export function ChartOfAccountsPage({ homePath, coaPath, searchQuery = '' }: Props) {
+  const { accid: accidParam } = useParams<{ accid?: string }>()
+  const accid = accidParam ? Number(accidParam) : NaN
+
+  if (accidParam && Number.isFinite(accid) && accid > 0) {
+    return <CoaAccountLedgerPage accid={accid} coaPath={coaPath} homePath={homePath} />
+  }
+
+  return <ChartOfAccountsBrowse homePath={homePath} coaPath={coaPath} searchQuery={searchQuery} />
+}
+
+function ChartOfAccountsBrowse({ homePath, coaPath, searchQuery = '' }: Props) {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const restored = (location.state as { coaBack?: CoaBackState } | null)?.coaBack
+
+  const [level, setLevel] = useState<Level>(restored?.level ?? 'charts')
+  const [chart, setChart] = useState<CoaChart | null>(restored?.chart ?? null)
+  const [subChart, setSubChart] = useState<CoaSubChart | null>(restored?.subChart ?? null)
+
+  const [charts, setCharts] = useState<CoaChart[]>([])
+  const [subCharts, setSubCharts] = useState<CoaSubChart[]>([])
+  const [accounts, setAccounts] = useState<CoaAccount[]>([])
+
+  const [chartsLoading, setChartsLoading] = useState(true)
+  const [subChartsLoading, setSubChartsLoading] = useState(false)
+  const [accountsLoading, setAccountsLoading] = useState(false)
 
   const q = searchQuery.trim().toLowerCase()
 
-  const charts = useMemo(() => {
-    if (!q || level !== 'charts') return CHART_OF_ACCOUNTS
-    return CHART_OF_ACCOUNTS.filter(
+  useEffect(() => {
+    const ac = new AbortController()
+    setChartsLoading(true)
+    fetchCoaCharts(ac.signal)
+      .then(setCharts)
+      .catch((err) => {
+        if (ac.signal.aborted) return
+        toast.error(err instanceof Error ? err.message : 'Could not load charts')
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setChartsLoading(false)
+      })
+    return () => ac.abort()
+  }, [])
+
+  useEffect(() => {
+    if (!chart || level === 'charts') return
+    const ac = new AbortController()
+    setSubChartsLoading(true)
+    fetchCoaSubCharts(chart.chartId, ac.signal)
+      .then(setSubCharts)
+      .catch((err) => {
+        if (ac.signal.aborted) return
+        toast.error(err instanceof Error ? err.message : 'Could not load sub charts')
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setSubChartsLoading(false)
+      })
+    return () => ac.abort()
+  }, [chart, level])
+
+  useEffect(() => {
+    if (!subChart || level !== 'accounts') return
+    const ac = new AbortController()
+    setAccountsLoading(true)
+    fetchCoaAccounts(subChart.groupId, ac.signal)
+      .then(setAccounts)
+      .catch((err) => {
+        if (ac.signal.aborted) return
+        toast.error(err instanceof Error ? err.message : 'Could not load accounts')
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setAccountsLoading(false)
+      })
+    return () => ac.abort()
+  }, [subChart, level])
+
+  const filteredCharts = useMemo(() => {
+    if (!q || level !== 'charts') return charts
+    return charts.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
-        c.code.includes(q) ||
-        c.type.toLowerCase().includes(q),
+        c.type.toLowerCase().includes(q) ||
+        String(c.chartId).includes(q),
     )
-  }, [q, level])
+  }, [charts, q, level])
 
-  const subCharts = useMemo(() => {
-    if (!chart) return []
-    const list = chart.subCharts
-    if (!q || level !== 'subCharts') return list
-    return list.filter(
-      (s) => s.name.toLowerCase().includes(q) || s.code.includes(q),
+  const filteredSubCharts = useMemo(() => {
+    if (!q || level !== 'subCharts') return subCharts
+    return subCharts.filter(
+      (s) => s.name.toLowerCase().includes(q) || String(s.groupId).includes(q),
     )
-  }, [chart, q, level])
+  }, [subCharts, q, level])
 
-  const accounts = useMemo(() => {
-    if (!subChart) return []
-    const list = subChart.accounts
-    if (!q || level !== 'accounts') return list
-    return list.filter(
+  const filteredAccounts = useMemo(() => {
+    if (!q || level !== 'accounts') return accounts
+    return accounts.filter(
       (a) =>
         a.name.toLowerCase().includes(q) ||
-        a.code.includes(q) ||
-        a.type.toLowerCase().includes(q),
+        a.accNo.toLowerCase().includes(q) ||
+        String(a.accid).includes(q),
     )
-  }, [subChart, q, level])
+  }, [accounts, q, level])
 
   function openChart(item: CoaChart) {
     setChart(item)
     setSubChart(null)
+    setSubCharts([])
+    setAccounts([])
     setLevel('subCharts')
   }
 
   function openSubChart(item: CoaSubChart) {
     setSubChart(item)
+    setAccounts([])
     setLevel('accounts')
+  }
+
+  function openAccount(item: CoaAccount) {
+    if (!chart || !subChart) return
+    navigate(`${coaPath}/account/${item.accid}`, {
+      state: { coaBack: { level: 'accounts', chart, subChart } },
+    })
   }
 
   function goCharts() {
     setLevel('charts')
     setChart(null)
     setSubChart(null)
+    setSubCharts([])
+    setAccounts([])
   }
 
   function goSubCharts() {
     if (!chart) return
     setLevel('subCharts')
     setSubChart(null)
+    setAccounts([])
   }
 
   const title =
@@ -90,6 +181,9 @@ export function ChartOfAccountsPage({ homePath, searchQuery = '' }: Props) {
       : level === 'subCharts'
         ? `Sub charts under ${chart?.name ?? ''}`
         : `Accounts under ${subChart?.name ?? ''}`
+
+  const totalSubCharts = charts.reduce((n, c) => n + c.subChartCount, 0)
+  const totalAccounts = charts.reduce((n, c) => n + c.accountCount, 0)
 
   return (
     <div className="flex flex-col gap-3.5 lg:gap-4">
@@ -152,29 +246,38 @@ export function ChartOfAccountsPage({ homePath, searchQuery = '' }: Props) {
         <>
           <SummaryStrip
             items={[
-              { label: 'Charts', value: String(CHART_OF_ACCOUNTS.length), tone: 'fuel' },
-              {
-                label: 'Sub Charts',
-                value: String(CHART_OF_ACCOUNTS.reduce((n, c) => n + c.subChartCount, 0)),
-                tone: 'sky',
-              },
-              {
-                label: 'Accounts',
-                value: String(CHART_OF_ACCOUNTS.reduce((n, c) => n + c.accountCount, 0)),
-                tone: 'credit',
-              },
+              { label: 'Charts', value: String(charts.length), tone: 'fuel' },
+              { label: 'Sub Charts', value: String(totalSubCharts), tone: 'sky' },
+              { label: 'Accounts', value: String(totalAccounts), tone: 'credit' },
             ]}
           />
-          <ChartsLevel charts={charts} onOpen={openChart} />
+          {chartsLoading ? (
+            <LoadingHint label="Loading charts…" />
+          ) : (
+            <ChartsLevel charts={filteredCharts} onOpen={openChart} />
+          )}
         </>
       )}
 
       {level === 'subCharts' && chart && (
-        <SubChartsLevel chart={chart} subCharts={subCharts} onOpen={openSubChart} />
+        subChartsLoading ? (
+          <LoadingHint label="Loading sub charts…" />
+        ) : (
+          <SubChartsLevel chart={chart} subCharts={filteredSubCharts} onOpen={openSubChart} />
+        )
       )}
 
       {level === 'accounts' && subChart && chart && (
-        <AccountsLevel chart={chart} subChart={subChart} accounts={accounts} />
+        accountsLoading ? (
+          <LoadingHint label="Loading accounts…" />
+        ) : (
+          <AccountsLevel
+            chart={chart}
+            subChart={subChart}
+            accounts={filteredAccounts}
+            onOpen={openAccount}
+          />
+        )
       )}
     </div>
   )
@@ -195,7 +298,7 @@ function ChartsLevel({
     <>
       <ul className="m-0 flex list-none flex-col gap-2.5 p-0 lg:hidden">
         {charts.map((item) => (
-          <li key={item.id}>
+          <li key={item.chartId}>
             <button
               type="button"
               onClick={() => onOpen(item)}
@@ -228,7 +331,7 @@ function ChartsLevel({
           <tbody>
             {charts.map((item) => (
               <tr
-                key={item.id}
+                key={item.chartId}
                 className="cursor-pointer hover:bg-[#fcfcfd]"
                 onClick={() => onOpen(item)}
               >
@@ -276,7 +379,7 @@ function SubChartsLevel({
         <>
           <ul className="m-0 flex list-none flex-col gap-2.5 p-0 lg:hidden">
             {subCharts.map((item) => (
-              <li key={item.id}>
+              <li key={item.groupId}>
                 <button
                   type="button"
                   onClick={() => onOpen(item)}
@@ -309,7 +412,7 @@ function SubChartsLevel({
               <tbody>
                 {subCharts.map((item) => (
                   <tr
-                    key={item.id}
+                    key={item.groupId}
                     className="cursor-pointer hover:bg-[#fcfcfd]"
                     onClick={() => onOpen(item)}
                   >
@@ -335,10 +438,12 @@ function AccountsLevel({
   chart,
   subChart,
   accounts,
+  onOpen,
 }: {
   chart: CoaChart
   subChart: CoaSubChart
   accounts: CoaAccount[]
+  onOpen: (a: CoaAccount) => void
 }) {
   return (
     <>
@@ -363,8 +468,12 @@ function AccountsLevel({
         <>
           <ul className="m-0 flex list-none flex-col gap-2.5 p-0 lg:hidden">
             {accounts.map((item) => (
-              <li key={item.id} className={`${panel} rounded-2xl p-3.5`}>
-                <div className="flex items-start justify-between gap-2">
+              <li key={item.accid}>
+                <button
+                  type="button"
+                  onClick={() => onOpen(item)}
+                  className={`${panel} flex w-full cursor-pointer items-start justify-between gap-2 rounded-2xl border-0 p-3.5 text-left hover:bg-[#fcfcfd]`}
+                >
                   <div>
                     <p className="mb-0 text-[0.92rem] font-extrabold text-ink">{item.name}</p>
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -381,7 +490,7 @@ function AccountsLevel({
                   >
                     {formatCoaPkr(item.balance)}
                   </p>
-                </div>
+                </button>
               </li>
             ))}
           </ul>
@@ -390,14 +499,18 @@ function AccountsLevel({
             <table className="w-full min-w-[720px] border-collapse">
               <thead>
                 <tr>
-                  {['Account Name', 'Normal Balance', 'Balance (PKR)', 'Status'].map((h) => (
-                    <Th key={h}>{h}</Th>
+                  {['Account Name', 'Normal Balance', 'Balance (PKR)', 'Status', ''].map((h) => (
+                    <Th key={h || 'action'}>{h}</Th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {accounts.map((item) => (
-                  <tr key={item.id} className="hover:bg-[#fcfcfd]">
+                  <tr
+                    key={item.accid}
+                    className="cursor-pointer hover:bg-[#fcfcfd]"
+                    onClick={() => onOpen(item)}
+                  >
                     <Td className="font-bold text-ink">{item.name}</Td>
                     <Td>{item.normalBalance}</Td>
                     <Td
@@ -411,6 +524,11 @@ function AccountsLevel({
                     </Td>
                     <Td>
                       <StatusPill status={item.status} />
+                    </Td>
+                    <Td>
+                      <span className="inline-flex items-center gap-1 text-[0.78rem] font-bold text-[#c99700]">
+                        Open <ChevronRight />
+                      </span>
                     </Td>
                   </tr>
                 ))}

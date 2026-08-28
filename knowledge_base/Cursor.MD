@@ -168,6 +168,32 @@ Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info
 - Charts removed: Credit vs Debit, Daily Net Flow
 - Wired in `DashboardShell` when `active === 'reports'`; bottom nav **Reports**
 
+## Chart of Accounts (2026-08-28, live)
+
+**Status:** Steps 1–3 UI unchanged; live SQL. Step 4 = separate **Account Ledger** page on account click.
+
+### Navigation (4 levels)
+1. **Charts** — `ChartAcc` via `GET /api/chart-of-accounts/charts`
+2. **Sub Charts** — Sir Idrees query (`GroupReg` + `Leger` by `ChartId`, `BizId`) via `GET /api/chart-of-accounts/charts/:chartId/sub-charts`
+3. **Accounts** — Sir Idrees query (`AccReg` by `GroupId`, `BizId`) via `GET /api/chart-of-accounts/groups/:groupId/accounts`
+4. **Account Ledger** (new page, same shell) — `/chart-of-accounts/account/:accid` (+ accountant/user prefixes). Transactions + fuel summary (HSD/PMG/HO/Advance/Others).
+
+### Files
+- `server/src/coaRoutes.js` — charts, sub-charts, accounts, account detail, transactions, fuel summary (SELECT only; `BizId` from `CompanyPro.CompanyId`)
+- `src/dashboard/chartOfAccounts.ts` — FE API helpers
+- `src/dashboard/ChartOfAccountsPage.tsx` — steps 1–3 (UI same as dummy); account row → navigate to ledger
+- `src/dashboard/CoaAccountLedgerPage.tsx` — step 4 transactions page
+- `src/dashboard/coa/useCoaAccountHistory.ts` — lazy transaction load
+- Routes: `App.tsx` + nested active tab in `DashboardShell` (like customers)
+- Auth: Administrator, Accountant, **User** (all roles with COA nav)
+- Sidebar order: Dashboard → **Chart of Accounts** (2nd) → Customers → …
+
+### Back navigation
+- Ledger **Back** returns to accounts list with `location.state.coaBack` restoring chart + sub-chart drill-down.
+
+### Legacy
+- `chartOfAccountsData.ts` — dummy data unused after live wiring; safe to remove later.
+
 ## Chart of Accounts — removed (2026-08-28)
 - Restored from `main`; dummy UI in `ChartOfAccountsPage.tsx` + `chartOfAccountsData.ts`.
 - **2026-08-28:** Removed **Code**, **Description**, **Type** columns (desktop + mobile) at all COA levels.

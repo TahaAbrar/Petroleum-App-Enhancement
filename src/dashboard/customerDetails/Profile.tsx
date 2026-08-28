@@ -51,7 +51,7 @@ export function CustomerDetailsProfile({ view, detailLoading, onBack }: Props) {
             onClick={onBack}
             className="cursor-pointer border-0 bg-transparent p-0 font-medium text-muted hover:text-ink"
           >
-            Customers
+            Search Account
           </button>
           <span className="mx-1.5 text-[#c4c9d2]">›</span>
           <span className="font-semibold text-ink">Customer Details</span>
@@ -62,7 +62,7 @@ export function CustomerDetailsProfile({ view, detailLoading, onBack }: Props) {
           className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-line bg-white px-4 py-2.5 text-[0.84rem] font-bold text-ink hover:bg-[#f7f8fa]"
         >
           <BackChevron />
-          Back to Customers
+          Back to Search Account
         </button>
       </div>
 
@@ -81,7 +81,6 @@ export function CustomerDetailsProfile({ view, detailLoading, onBack }: Props) {
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
                 <IdChip label="Customer ID" value={displayText(view.id)} accent />
-                <IdChip label="CNIC" value={displayText(view.cnic)} />
               </div>
             </div>
           </div>
@@ -142,14 +141,12 @@ export function CustomerDetailsProfile({ view, detailLoading, onBack }: Props) {
           </h3>
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
             <InfoIconCard icon="user" iconTone="fuel" label="Customer Name" value={view.name} />
-            <InfoIconCard icon="phone" iconTone="sky" label="Phone" value={displayText(view.phone)} />
-            <InfoIconCard icon="email" iconTone="credit" label="Email" value={displayText(view.email)} />
+            <InfoIconCard icon="pin" iconTone="sky" label="Account Type / Group" value={displayText(view.type)} />
             <InfoIconCard
-              icon="pin"
-              iconTone="amber"
-              label="Address"
-              value={displayText(view.address)}
-              className="sm:col-span-2 xl:col-span-2"
+              icon="calendar"
+              iconTone="sky"
+              label="Account Since"
+              value={formatFilterDate(view.createdAt)}
             />
             <InfoIconCard
               icon="clipboard"
@@ -168,19 +165,6 @@ export function CustomerDetailsProfile({ view, detailLoading, onBack }: Props) {
                   className={view.currentBalance < 0 ? 'text-debit' : 'text-credit'}
                 />
               }
-            />
-            <InfoIconCard
-              icon="note"
-              iconTone="fuel"
-              label="Notes"
-              value={displayText(view.notes)}
-              className="sm:col-span-2 xl:col-span-2"
-            />
-            <InfoIconCard
-              icon="calendar"
-              iconTone="sky"
-              label="Account Since"
-              value={formatFilterDate(view.createdAt)}
             />
           </div>
         </section>
