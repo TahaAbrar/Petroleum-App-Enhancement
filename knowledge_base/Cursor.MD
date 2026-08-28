@@ -4,8 +4,8 @@
 - Repo: Petroleum-App-Enhancement (cloned into `/home/hanan/fuel-pro`)
 - Frontend: Vite + React + Tailwind (`npm run dev`) — default Vite port **5173**
 - Backend: Express API in `server/` (`npm run dev:api`) — default **PORT=4000**
-- Vite proxies `/api` → `http://127.0.0.1:4000`
-- CORS expects FE at `http://localhost:5173` / `http://127.0.0.1:5173`
+- Vite proxies `/api` → `http://127.0.0.1:4001` (`VITE_API_PROXY_TARGET`, matches `server/.env` PORT)
+- Dev CORS allows public/LAN Origin (e.g. `http://169.58.29.84:5173`), not only localhost
 - SQL Server expected on **1433** (`DB_PORT` in `server/.env.example`)
 
 ## Server host
@@ -182,6 +182,7 @@ Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info
 
 ## Agent notes
 - Multiple agents: read this file before work; update after meaningful changes.
+- 2026-08-27: Public login 403 was CORS + proxy port. Vite now proxies to **4001**. Dev CORS allows `--host` public Origin. Both tmux sessions restarted.
 - `knowledge_base/` is the shared coordination folder.
 
 ## Frontend `src/` architecture (2026-08-26 exploration)
