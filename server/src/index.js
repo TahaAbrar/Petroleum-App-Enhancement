@@ -20,6 +20,8 @@ app.use(
   cors({
     origin(origin, cb) {
       if (!origin || env.corsOrigin.includes(origin)) return cb(null, true)
+      // Vite `--host 0.0.0.0` sends Origin as the public/LAN URL, not localhost
+      if (env.nodeEnv !== 'production' && /^https?:\/\//.test(origin)) return cb(null, true)
       return cb(new Error('Not allowed by CORS'))
     },
     credentials: true,
