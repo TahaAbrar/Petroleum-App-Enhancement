@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import {
   CHART_OF_ACCOUNTS,
   formatCoaPkr,
-  type AccountType,
   type CoaAccount,
   type CoaChart,
   type CoaSubChart,
@@ -194,7 +193,6 @@ function ChartsLevel({
 
   return (
     <>
-      {/* Mobile cards */}
       <ul className="m-0 flex list-none flex-col gap-2.5 p-0 lg:hidden">
         {charts.map((item) => (
           <li key={item.id}>
@@ -203,15 +201,11 @@ function ChartsLevel({
               onClick={() => onOpen(item)}
               className={`${panel} flex w-full cursor-pointer items-center gap-3 rounded-2xl border-0 p-3.5 text-left hover:bg-[#fcfcfd]`}
             >
-              <TypeIcon type={item.type} />
+              <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-fuel-soft text-[#c99700]">
+                <LedgerIcon />
+              </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="rounded-lg bg-[#f4f5f7] px-2 py-0.5 text-[0.7rem] font-extrabold text-[#c99700]">
-                    {item.code}
-                  </span>
-                  <TypePill type={item.type} />
-                </div>
-                <p className="mt-1.5 mb-0 text-[0.95rem] font-extrabold text-ink">{item.name}</p>
+                <p className="mb-0 text-[0.95rem] font-extrabold text-ink">{item.name}</p>
                 <p className="mt-0.5 mb-0 truncate text-[0.72rem] font-medium text-muted">
                   {item.subChartCount} sub charts · {item.accountCount} accounts
                 </p>
@@ -222,12 +216,11 @@ function ChartsLevel({
         ))}
       </ul>
 
-      {/* Desktop table */}
       <section className={`hidden ${panel} rounded-2xl p-4 lg:block lg:p-5`}>
         <table className="w-full border-collapse">
           <thead>
             <tr>
-              {['Code', 'Chart Name', 'Type', 'Sub Charts', 'Accounts', 'Description', ''].map((h) => (
+              {['Chart Name', 'Sub Charts', 'Accounts', ''].map((h) => (
                 <Th key={h || 'action'}>{h}</Th>
               ))}
             </tr>
@@ -239,14 +232,9 @@ function ChartsLevel({
                 className="cursor-pointer hover:bg-[#fcfcfd]"
                 onClick={() => onOpen(item)}
               >
-                <Td className="font-extrabold text-[#c99700]">{item.code}</Td>
                 <Td className="font-bold text-ink">{item.name}</Td>
-                <Td>
-                  <TypePill type={item.type} />
-                </Td>
                 <Td>{item.subChartCount}</Td>
                 <Td>{item.accountCount}</Td>
-                <Td className="max-w-[220px] truncate text-muted">{item.description}</Td>
                 <Td>
                   <span className="inline-flex items-center gap-1 text-[0.78rem] font-bold text-[#c99700]">
                     Open <ChevronRight />
@@ -273,14 +261,13 @@ function SubChartsLevel({
   return (
     <>
       <article className={`${panel} flex items-center gap-3 rounded-2xl p-4`}>
-        <TypeIcon type={chart.type} />
+        <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-fuel-soft text-[#c99700]">
+          <LedgerIcon />
+        </div>
         <div className="min-w-0">
           <p className="m-0 text-[0.72rem] font-semibold text-muted">Parent Chart</p>
-          <p className="mt-0.5 mb-0 text-[1rem] font-extrabold text-ink">
-            {chart.code} · {chart.name}
-          </p>
+          <p className="mt-0.5 mb-0 text-[1rem] font-extrabold text-ink">{chart.name}</p>
         </div>
-        <TypePill type={chart.type} />
       </article>
 
       {subCharts.length === 0 ? (
@@ -299,10 +286,7 @@ function SubChartsLevel({
                     <FolderIcon />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <span className="rounded-lg bg-[#f4f5f7] px-2 py-0.5 text-[0.7rem] font-extrabold text-[#c99700]">
-                      {item.code}
-                    </span>
-                    <p className="mt-1.5 mb-0 text-[0.95rem] font-extrabold text-ink">{item.name}</p>
+                    <p className="mb-0 text-[0.95rem] font-extrabold text-ink">{item.name}</p>
                     <p className="mt-0.5 mb-0 text-[0.72rem] font-medium text-muted">
                       {item.accountCount} accounts
                     </p>
@@ -317,7 +301,7 @@ function SubChartsLevel({
             <table className="w-full border-collapse">
               <thead>
                 <tr>
-                  {['Code', 'Sub Chart Name', 'Accounts', 'Description', ''].map((h) => (
+                  {['Sub Chart Name', 'Accounts', ''].map((h) => (
                     <Th key={h || 'action'}>{h}</Th>
                   ))}
                 </tr>
@@ -329,10 +313,8 @@ function SubChartsLevel({
                     className="cursor-pointer hover:bg-[#fcfcfd]"
                     onClick={() => onOpen(item)}
                   >
-                    <Td className="font-extrabold text-[#c99700]">{item.code}</Td>
                     <Td className="font-bold text-ink">{item.name}</Td>
                     <Td>{item.accountCount}</Td>
-                    <Td className="max-w-[280px] truncate text-muted">{item.description}</Td>
                     <Td>
                       <span className="inline-flex items-center gap-1 text-[0.78rem] font-bold text-[#c99700]">
                         Open <ChevronRight />
@@ -366,11 +348,9 @@ function AccountsLevel({
         </div>
         <div className="min-w-0 flex-1">
           <p className="m-0 text-[0.72rem] font-semibold text-muted">
-            {chart.code} {chart.name} › Sub Chart
+            {chart.name} › Sub Chart
           </p>
-          <p className="mt-0.5 mb-0 text-[1rem] font-extrabold text-ink">
-            {subChart.code} · {subChart.name}
-          </p>
+          <p className="mt-0.5 mb-0 text-[1rem] font-extrabold text-ink">{subChart.name}</p>
         </div>
         <span className="rounded-full bg-[#f4f5f7] px-3 py-1 text-[0.72rem] font-bold text-muted">
           {accounts.length} accounts
@@ -386,12 +366,8 @@ function AccountsLevel({
               <li key={item.id} className={`${panel} rounded-2xl p-3.5`}>
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <span className="rounded-lg bg-[#f4f5f7] px-2 py-0.5 text-[0.7rem] font-extrabold text-[#c99700]">
-                      {item.code}
-                    </span>
-                    <p className="mt-1.5 mb-0 text-[0.92rem] font-extrabold text-ink">{item.name}</p>
+                    <p className="mb-0 text-[0.92rem] font-extrabold text-ink">{item.name}</p>
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      <TypePill type={item.type} />
                       <span className="rounded-full bg-[#f4f5f7] px-2 py-0.5 text-[0.65rem] font-bold text-muted">
                         {item.normalBalance}
                       </span>
@@ -414,14 +390,7 @@ function AccountsLevel({
             <table className="w-full min-w-[720px] border-collapse">
               <thead>
                 <tr>
-                  {[
-                    'Code',
-                    'Account Name',
-                    'Type',
-                    'Normal Balance',
-                    'Balance (PKR)',
-                    'Status',
-                  ].map((h) => (
+                  {['Account Name', 'Normal Balance', 'Balance (PKR)', 'Status'].map((h) => (
                     <Th key={h}>{h}</Th>
                   ))}
                 </tr>
@@ -429,11 +398,7 @@ function AccountsLevel({
               <tbody>
                 {accounts.map((item) => (
                   <tr key={item.id} className="hover:bg-[#fcfcfd]">
-                    <Td className="font-extrabold text-[#c99700]">{item.code}</Td>
                     <Td className="font-bold text-ink">{item.name}</Td>
-                    <Td>
-                      <TypePill type={item.type} />
-                    </Td>
                     <Td>{item.normalBalance}</Td>
                     <Td
                       className={
@@ -492,21 +457,6 @@ function EmptyState({ message }: { message: string }) {
   )
 }
 
-function TypePill({ type }: { type: AccountType }) {
-  const styles: Record<AccountType, string> = {
-    Asset: 'bg-[#e8f0fe] text-[#2563eb]',
-    Liability: 'bg-debit-bg text-debit',
-    Equity: 'bg-fuel-soft text-[#a67c00]',
-    Income: 'bg-credit-bg text-credit',
-    Expense: 'bg-[#fff1e0] text-orange',
-  }
-  return (
-    <span className={`inline-flex rounded-full px-2.5 py-1 text-[0.68rem] font-bold ${styles[type]}`}>
-      {type}
-    </span>
-  )
-}
-
 function StatusPill({ status }: { status: 'Active' | 'Inactive' }) {
   return (
     <span
@@ -516,24 +466,6 @@ function StatusPill({ status }: { status: 'Active' | 'Inactive' }) {
     >
       {status}
     </span>
-  )
-}
-
-function TypeIcon({ type }: { type: AccountType }) {
-  const tone =
-    type === 'Asset'
-      ? 'bg-[#e8f0fe] text-[#2563eb]'
-      : type === 'Liability'
-        ? 'bg-debit-bg text-debit'
-        : type === 'Equity'
-          ? 'bg-fuel-soft text-[#c99700]'
-          : type === 'Income'
-            ? 'bg-credit-bg text-credit'
-            : 'bg-[#fff1e0] text-orange'
-  return (
-    <div className={`grid size-11 shrink-0 place-items-center rounded-xl ${tone}`}>
-      <LedgerIcon />
-    </div>
   )
 }
 

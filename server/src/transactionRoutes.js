@@ -162,6 +162,115 @@ function displayProduct(row) {
   return fields.product
 }
 
+/** Payment mode for transactions table — from SlipType, Description, account, Leger.Type. */
+function resolvePaymentType(row) {
+  const slipType = cleanText(row.SlipType)
+  if (slipType) {
+    return slipType.charAt(0).toUpperCase() + slipType.slice(1).toLowerCase()
+  }
+
+  const desc = cleanText(row.Description).toLowerCase()
+  const acc = cleanText(row.AccName).toLowerCase()
+  const legerType = cleanText(row.Type)
+
+  if (/\bonline\b|1bill|jazz\s*cash|\bpos\b|card\s*pos|card machine|byco company 1bill/.test(desc)) {
+    return 'Online'
+  }
+  if (/\btransfer\b|khata|\bcheck\b|cheque/.test(desc)) {
+    return 'Transfer'
+  }
+
+  if (/bank|mcb|alfalah|meezan|hbl|ubl|faysal/.test(acc)) return 'Online'
+
+  if (legerType === 'JV') return 'Transfer'
+  if (legerType === 'Slip') return 'Cash'
+  if (legerType === 'Purchases' || legerType === 'DSales' || legerType === 'Adjustment') {
+    return 'Transfer'
+  }
+  if (legerType === 'Sales') return 'Cash'
+
+  return legerType || '—'
+}
+
+function mapRow(row, kind) {
+  const { type, amount } = mapAmount(row, kind)
+  const name = cleanText(row.AccName) || '—'
+  const fields = productFields(row)
+  return {
+    trid: row.Trid,
+    id: txDisplayId(row.Type, row.VNo, row.Trid),
+    vno: row.VNo != null && row.VNo !== '' ? String(row.VNo) : '—',
+    accid: row.Accid,
+    slug: customerSlug(name, row.Accid),
+    when: formatWhen(row.Dated, row.Timed),
+    customer: name,
+    type,
+    ledgerType: cleanText(row.Type) || '—',
+    paymentType: resolvePaymentType(row),
+    product: displayProduct(row),
+    quantity: fields.quantity,
+    rate: fields.rate,
+    amount,
+    debit: money(row.Debit),
+    credit: money(row.Credit),
+    balance: money(row.RunningBalance),
+    reference: cleanText(row.RefNo) || (row.VNo != null && row.VNo !== '' ? String(row.VNo) : '—'),
+    by: cleanText(row.UserName) || cleanText(row.UserType) || '—',
+    description: cleanText(row.Description) || '—',
+  }
+}
+
+function voucherKeysCte() {
+  return `
+      VoucherKeys AS (
+        SELECT
+          Tx.Dated,
+          Tx.VNo,
+          Tx.Type,
+          MIN(Tx.Trid) AS AnchorTrid
+        FROM Tx
+        GROUP BY Tx.Dated, Tx.VNo, Tx.Type
+        HAVING (@hasFrom = 0 OR CAST(MIN(Tx.Dated) AS date) >= @dateFrom)
+          AND (@hasTo = 0 OR CAST(MIN(Tx.Dated) AS date) <= @dateTo)
+          AND (
+            @hasAccid = 0
+            OR MAX(CASE WHEN Tx.Accid = @accid THEN 1 ELSE 0 END) = 1
+          )
+          AND (
+            @kind = N'all'
+            OR (@kind = N'credit' AND MAX(CASE WHEN ISNULL(Tx.Credit, 0) > 0 THEN 1 ELSE 0 END) = 1)
+            OR (@kind = N'debit' AND MAX(CASE WHEN ISNULL(Tx.Debit, 0) > 0 THEN 1 ELSE 0 END) = 1)
+          )
+          AND (
+            @q = N''
+            OR MAX(CASE
+              WHEN Tx.AccName LIKE @qLike
+                OR Tx.Description LIKE @qLike
+                OR CAST(Tx.RefNo AS nvarchar(80)) LIKE @qLike
+                OR CAST(Tx.VNo AS nvarchar(80)) LIKE @qLike
+              THEN 1 ELSE 0 END) = 1
+          )
+      ),
+      VoucherRank AS (
+        SELECT
+          VoucherKeys.Dated,
+          VoucherKeys.VNo,
+          VoucherKeys.Type,
+          VoucherKeys.AnchorTrid,
+          ROW_NUMBER() OVER (
+            ORDER BY
+              CASE WHEN @sort = N'recent' THEN VoucherKeys.Dated END DESC,
+              CASE WHEN @sort = N'oldest' THEN VoucherKeys.Dated END ASC,
+              CASE WHEN @sort = N'recent' THEN VoucherKeys.VNo END DESC,
+              CASE WHEN @sort = N'oldest' THEN VoucherKeys.VNo END ASC,
+              CASE WHEN @sort = N'recent' THEN VoucherKeys.AnchorTrid END DESC,
+              CASE WHEN @sort = N'oldest' THEN VoucherKeys.AnchorTrid END ASC
+          ) AS VoucherRn
+        FROM VoucherKeys
+      )
+  `
+}
+
 function dbFail(res, err) {
   console.error('[transactions] db error', err.message)
   return res.status(503).json({
@@ -335,9 +444,34 @@ transactionRouter.get('/', async (req, res) => {
       ${filterSql('L')}
     `)
     const summaryRow = summaryResult.recordset[0] || {}
-    const total = money(summaryRow.TotalTransactions)
     const totalCredit = money(summaryRow.TotalCredit)
     const totalDebit = money(summaryRow.TotalDebit)
+
+    const countReq = pool.request()
+    bindListParams(countReq, parsed.data)
+    countReq.input('sort', sql.NVarChar(10), sort)
+    const countResult = await countReq.query(`
+      WITH Tx AS (
+        SELECT
+          L.Trid,
+          L.Dated,
+          L.Type,
+          L.VNo,
+          L.RefNo,
+          L.Debit,
+          L.Credit,
+          L.Description,
+          L.Accid,
+          A.AccName
+        FROM dbo.Leger L
+        INNER JOIN dbo.AccReg A ON A.Accid = L.Accid
+        INNER JOIN dbo.GroupReg G ON G.GroupId = A.GroupId
+        WHERE ${STATUS_SQL}
+      ),
+      ${voucherKeysCte()}
+      SELECT COUNT(*) AS TotalVouchers FROM VoucherRank
+    `)
+    const total = money(countResult.recordset[0]?.TotalVouchers)
 
     const listReq = pool.request()
     bindListParams(listReq, parsed.data)
@@ -356,6 +490,8 @@ transactionRouter.get('/', async (req, res) => {
           L.Debit,
           L.Credit,
           L.Description,
+          L.SlipType,
+          L.Cash,
           L.UserId,
           L.HSD,
           L.RHSD,
@@ -371,6 +507,12 @@ transactionRouter.get('/', async (req, res) => {
         INNER JOIN dbo.AccReg A ON A.Accid = L.Accid
         INNER JOIN dbo.GroupReg G ON G.GroupId = A.GroupId
         WHERE ${STATUS_SQL}
+      ),
+      ${voucherKeysCte()},
+      PagedVouchers AS (
+        SELECT Dated, VNo, Type, VoucherRn
+        FROM VoucherRank
+        WHERE VoucherRn > @offset AND VoucherRn <= @offset + @limit
       )
       SELECT
         Tx.Trid,
@@ -382,6 +524,8 @@ transactionRouter.get('/', async (req, res) => {
         Tx.Debit,
         Tx.Credit,
         Tx.Description,
+        Tx.SlipType,
+        Tx.Cash,
         Tx.HSD,
         Tx.RHSD,
         Tx.PMG,
@@ -392,40 +536,23 @@ transactionRouter.get('/', async (req, res) => {
         Tx.AccName,
         Tx.RunningBalance,
         U.UserName,
-        U.Type AS UserType
+        U.Type AS UserType,
+        pv.VoucherRn
       FROM Tx
+      INNER JOIN PagedVouchers pv
+        ON Tx.Dated = pv.Dated AND Tx.VNo = pv.VNo AND Tx.Type = pv.Type
       LEFT JOIN dbo.UserReg U ON U.UserId = Tx.UserId
-      WHERE 1 = 1
-      ${filterSql('Tx')}
       ORDER BY
-        CASE WHEN @sort = N'recent' THEN Tx.Dated END DESC,
-        CASE WHEN @sort = N'recent' THEN Tx.Trid END DESC,
-        CASE WHEN @sort = N'oldest' THEN Tx.Dated END ASC,
-        CASE WHEN @sort = N'oldest' THEN Tx.Trid END ASC
-      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+        pv.VoucherRn,
+        CASE
+          WHEN ISNULL(Tx.Debit, 0) > 0 AND ISNULL(Tx.Credit, 0) = 0 THEN 0
+          WHEN ISNULL(Tx.Credit, 0) > 0 AND ISNULL(Tx.Debit, 0) = 0 THEN 1
+          ELSE 2
+        END,
+        Tx.Trid ASC
     `)
 
-    const transactions = listResult.recordset.map((row) => {
-      const { type, amount } = mapAmount(row, kind)
-      const name = cleanText(row.AccName) || '—'
-      const fields = productFields(row)
-      return {
-        trid: row.Trid,
-        id: txDisplayId(row.Type, row.VNo, row.Trid),
-        accid: row.Accid,
-        slug: customerSlug(name, row.Accid),
-        when: formatWhen(row.Dated, row.Timed),
-        customer: name,
-        type,
-        product: displayProduct(row),
-        quantity: fields.quantity,
-        rate: fields.rate,
-        amount,
-        balance: money(row.RunningBalance),
-        reference: cleanText(row.RefNo) || (row.VNo != null && row.VNo !== '' ? String(row.VNo) : '—'),
-        by: cleanText(row.UserName) || cleanText(row.UserType) || '—',
-      }
-    })
+    const transactions = listResult.recordset.map((row) => mapRow(row, kind))
 
     return res.json({
       ok: true,

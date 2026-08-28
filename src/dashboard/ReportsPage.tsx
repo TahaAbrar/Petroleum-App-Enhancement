@@ -8,9 +8,8 @@ import {
   REPORT_RECENT_TX,
   REPORT_SUMMARY,
   REPORT_TYPES,
-  TOP_CUSTOMERS,
 } from './reportsData'
-import { panel, selectBtn } from './styles'
+import { panel } from './styles'
 import { toast } from '../toast'
 
 type Props = {
@@ -137,46 +136,10 @@ export function ReportsPage({ homePath, txPath }: Props) {
         />
       </section>
 
-      {/* Desktop tables */}
-      <section className="hidden gap-4 xl:grid xl:grid-cols-2" aria-label="Report tables">
+      {/* Desktop table */}
+      <section className="hidden xl:block" aria-label="Report tables">
         <article className={`${panel} rounded-2xl p-5`}>
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="m-0 text-[0.95rem] font-extrabold">Top Customers by Net Flow</h2>
-            <PeriodSelect />
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[420px] border-collapse">
-              <thead>
-                <tr>
-                  {['#', 'Customer', 'Total Credit (PKR)', 'Total Debit (PKR)', 'Net Flow (PKR)'].map(
-                    (h) => (
-                      <Th key={h}>{h}</Th>
-                    ),
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {TOP_CUSTOMERS.map((row) => (
-                  <tr key={row.rank} className="hover:bg-[#fcfcfd]">
-                    <Td>{row.rank}</Td>
-                    <Td className="font-semibold text-ink">{row.name}</Td>
-                    <Td>{row.credit}</Td>
-                    <Td>{row.debit}</Td>
-                    <Td className={row.netPositive ? 'font-bold text-credit' : 'font-bold text-debit'}>
-                      {row.net}
-                    </Td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </article>
-
-        <article className={`${panel} rounded-2xl p-5`}>
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="m-0 text-[0.95rem] font-extrabold">Product / Service Summary</h2>
-            <PeriodSelect />
-          </div>
+          <h2 className="mb-3 text-[0.95rem] font-extrabold">Product / Service Summary</h2>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[380px] border-collapse">
               <thead>
@@ -308,15 +271,6 @@ function FieldDate({ label, value }: { label: string; value: string }) {
         </svg>
       </div>
     </label>
-  )
-}
-
-function PeriodSelect() {
-  return (
-    <button type="button" className={`${selectBtn} text-[0.7rem]`}>
-      This Month
-      <ChevronDown size={14} />
-    </button>
   )
 }
 

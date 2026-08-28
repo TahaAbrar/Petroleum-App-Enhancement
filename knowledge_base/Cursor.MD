@@ -74,7 +74,8 @@ npm run dev -- --host 0.0.0.0 --port 5174
 - First paint **15** rows; after ~5th row / sentinel reveal **+15** until 50; numbered pager for the next 50 (scrolls to top)
 - Filters: searchable customer menu (All customers + typeahead), From/To dates, type menu, Reset + Filter — dropdowns stack above summary cards
 - Summary: live COUNT / SUM(Credit) / SUM(Debit) / Net Flow (Credit − Debit). No dummy percentages
-- Table: `table-fixed` like customer history; Date only (no time); product wraps; Amount/Balance stack PKR
+- Table: ledger-style double-entry rows — **Date**, **V.No**, **Account Name**, **Type** (payment mode: Online / Transfer / Cash from `SlipType` + `Description` + account), **Debit**, **Credit**. Each voucher shows 2 rows (debit leg + credit leg) like the legacy report.
+- **2026-08-28:** Pair debit/credit legs by **matching amount** + same date/type; show **same V.No** on both rows (Slip entries often use different VNo per leg in DB, e.g. 272/273). **Debit row first, credit row second**. Single-leg **Slip** rows (no counter-entry in DB — common for Awais Corporation fuel slips) get a synthetic **Cash In Hand** opposite line so the table always shows 2 rows per voucher like the legacy report.
 - Removed: ID column, Export, “Showing 1 to 10” / n-per-page dropdown
 - Route changes (sidebar) also scroll to top via `DashboardShell`
 
@@ -162,19 +163,16 @@ Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info
 
 ## Reports page (2026-08-26)
 - `src/dashboard/ReportsPage.tsx` + `reportsData.ts` — dummy UI
-- Desktop: filters (+ product), Export, Generate, 4 KPIs, Top Customers + Product summary tables
+- Desktop: filters (+ product), Export, Generate, 4 KPIs, Product / Service Summary table only (no period selector on card; Top Customers removed 2026-08-28)
 - Mobile: filters (no product), Generate, 2×2 KPIs, Recent Transactions
 - Charts removed: Credit vs Debit, Daily Net Flow
 - Wired in `DashboardShell` when `active === 'reports'`; bottom nav **Reports**
 
-## Chart of Accounts (sidebar item under Reports) — 2026-08-26
-- Separate sidebar nav item **below Reports** (not a tab inside Reports)
-- Routes: `/chart-of-accounts`, `/accountant/chart-of-accounts`, `/user/chart-of-accounts`
-- Files: `ChartOfAccountsPage.tsx`, `chartOfAccountsData.ts`
-- 3-step drill-down: Charts → Sub Charts → Accounts
-- Breadcrumbs + Back; mobile cards + desktop tables; FuelLedger theme dummy data
+## Chart of Accounts — removed (2026-08-28)
+- Restored from `main`; dummy UI in `ChartOfAccountsPage.tsx` + `chartOfAccountsData.ts`.
+- **2026-08-28:** Removed **Code**, **Description**, **Type** columns (desktop + mobile) at all COA levels.
 
-## Merge conflict resolve (2026-08-27, Chart of Accounts + company brand)
+## Merge conflict resolve (2026-08-27, company brand)
 - Unmerged: `src/dashboard/DashboardShell.tsx` on `feature/CustomerPage`.
 - Working tree had dropped both import blocks while the body still used company helpers and `ChartOfAccountsPage`.
 - Resolution: keep HEAD company brand (`./company`, pageCache, nested Customers tab, logout menus) **and** incoming `ChartOfAccountsPage` import/route.
