@@ -74,7 +74,8 @@ npm run dev -- --host 0.0.0.0 --port 5174
 - First paint **15** rows; after ~5th row / sentinel reveal **+15** until 50; numbered pager for the next 50 (scrolls to top)
 - Filters: searchable customer menu (All customers + typeahead), From/To dates, type menu, Reset + Filter — dropdowns stack above summary cards
 - Summary: live COUNT / SUM(Credit) / SUM(Debit) / Net Flow (Credit − Debit). No dummy percentages
-- Table: `table-fixed` like customer history; Date only (no time); product wraps; Amount/Balance stack PKR
+- Table: ledger-style double-entry rows — **Date**, **V.No**, **Account Name**, **Type** (payment mode: Online / Transfer / Cash from `SlipType` + `Description` + account), **Debit**, **Credit**. Each voucher shows 2 rows (debit leg + credit leg) like the legacy report.
+- **2026-08-28:** Pair debit/credit legs by **matching amount** + same date/type; show **same V.No** on both rows (Slip entries often use different VNo per leg in DB, e.g. 272/273). **Debit row first, credit row second**. Single-leg **Slip** rows (no counter-entry in DB — common for Awais Corporation fuel slips) get a synthetic **Cash In Hand** opposite line so the table always shows 2 rows per voucher like the legacy report.
 - Removed: ID column, Export, “Showing 1 to 10” / n-per-page dropdown
 - Route changes (sidebar) also scroll to top via `DashboardShell`
 
@@ -160,21 +161,65 @@ Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info
 - **FE:** `src/lib/api.ts` sends Bearer + key; `customers.ts` is live helpers (mock array removed)
 - **Balance:** `ISNULL(OpBal,0) + SUM(Debit) - SUM(Credit)`; history running balance via window on Trid; include Posted + NULL ledger rows
 
+## Reports page (2026-08-28, live)
+
+**Status:** Live SQL via `GET /api/reports/*`. Dummy `reportsData.ts` unused.
+
+### Files
+- `server/src/reportsRoutes.js` — filters, summary, product breakdown, recent tx (SELECT on `Leger` + `AccReg`)
+- `src/dashboard/reports.ts` — FE API helpers
+- `src/dashboard/ReportsPage.tsx` — same UI theme; live KPIs, filters, product table, mobile recent tx
+
+### Filters (from DB)
+- **Report Type** — `Leger.Type` (Slip, DSales, JV, Purchases, Adjustment, Sales) + All Types
+- **Date Range** — `Leger.Dated` (defaults to min/max in DB)
+- **Customer** — `AccReg` (70 accounts) + All Customers
+- **Product** — PMG, HSD, HO, Cash, Other + All Products (desktop)
+
+### Data shown
+- KPIs: SUM(Credit), SUM(Debit), Net Flow, COUNT (`Leger`)
+- Product table: **Stock In / Stock Out / Net** from `Stockleger` + `ItemReg`, current stock from `StockValue`; Cash/Other from `Leger`
+- Product filter: all `ItemReg` items + Cash + Other
+- Mobile: top 5 recent ledger rows (filtered)
+
 ## Reports page (2026-08-26)
 - `src/dashboard/ReportsPage.tsx` + `reportsData.ts` — dummy UI
-- Desktop: filters (+ product), Export, Generate, 4 KPIs, Top Customers + Product summary tables
+- Desktop: filters (+ product), Export, Generate, 4 KPIs, Product / Service Summary table only (no period selector on card; Top Customers removed 2026-08-28)
 - Mobile: filters (no product), Generate, 2×2 KPIs, Recent Transactions
 - Charts removed: Credit vs Debit, Daily Net Flow
 - Wired in `DashboardShell` when `active === 'reports'`; bottom nav **Reports**
 
-## Chart of Accounts (sidebar item under Reports) — 2026-08-26
-- Separate sidebar nav item **below Reports** (not a tab inside Reports)
-- Routes: `/chart-of-accounts`, `/accountant/chart-of-accounts`, `/user/chart-of-accounts`
-- Files: `ChartOfAccountsPage.tsx`, `chartOfAccountsData.ts`
-- 3-step drill-down: Charts → Sub Charts → Accounts
-- Breadcrumbs + Back; mobile cards + desktop tables; FuelLedger theme dummy data
+## Chart of Accounts (2026-08-28, live)
 
-## Merge conflict resolve (2026-08-27, Chart of Accounts + company brand)
+**Status:** Steps 1–3 UI unchanged; live SQL. Step 4 = separate **Account Ledger** page on account click.
+
+### Navigation (4 levels)
+1. **Charts** — `ChartAcc` via `GET /api/chart-of-accounts/charts`
+2. **Sub Charts** — Sir Idrees query (`GroupReg` + `Leger` by `ChartId`, `BizId`) via `GET /api/chart-of-accounts/charts/:chartId/sub-charts`
+3. **Accounts** — Sir Idrees query (`AccReg` by `GroupId`, `BizId`) via `GET /api/chart-of-accounts/groups/:groupId/accounts`
+4. **Account Ledger** (new page, same shell) — `/chart-of-accounts/account/:accid` (+ accountant/user prefixes). Transactions + fuel summary (HSD/PMG/HO/Advance/Others).
+
+### Files
+- `server/src/coaRoutes.js` — charts, sub-charts, accounts, account detail, transactions, fuel summary (SELECT only; `BizId` from `CompanyPro.CompanyId`)
+- `src/dashboard/chartOfAccounts.ts` — FE API helpers
+- `src/dashboard/ChartOfAccountsPage.tsx` — steps 1–3 (UI same as dummy); account row → navigate to ledger
+- `src/dashboard/CoaAccountLedgerPage.tsx` — step 4 transactions page
+- `src/dashboard/coa/useCoaAccountHistory.ts` — lazy transaction load
+- Routes: `App.tsx` + nested active tab in `DashboardShell` (like customers)
+- Auth: Administrator, Accountant, **User** (all roles with COA nav)
+- Sidebar order: Dashboard → **Chart of Accounts** (2nd) → Customers → …
+
+### Back navigation
+- Ledger **Back** returns to accounts list with `location.state.coaBack` restoring chart + sub-chart drill-down.
+
+### Legacy
+- `chartOfAccountsData.ts` — dummy data unused after live wiring; safe to remove later.
+
+## Chart of Accounts — removed (2026-08-28)
+- Restored from `main`; dummy UI in `ChartOfAccountsPage.tsx` + `chartOfAccountsData.ts`.
+- **2026-08-28:** Removed **Code**, **Description**, **Type** columns (desktop + mobile) at all COA levels.
+
+## Merge conflict resolve (2026-08-27, company brand)
 - Unmerged: `src/dashboard/DashboardShell.tsx` on `feature/CustomerPage`.
 - Working tree had dropped both import blocks while the body still used company helpers and `ChartOfAccountsPage`.
 - Resolution: keep HEAD company brand (`./company`, pageCache, nested Customers tab, logout menus) **and** incoming `ChartOfAccountsPage` import/route.

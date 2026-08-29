@@ -15,6 +15,7 @@ import {
   fetchKindStats,
   fetchTransactionCustomers,
   fetchTransactions,
+  normalizeTransactionRow,
   type TransactionCustomer,
   type TransactionListParams,
   type TransactionRow,
@@ -104,7 +105,9 @@ export function peekCustomerGroups() {
 }
 
 export function peekTransactions(params: TransactionListParams = EMPTY_TX_FILTERS, page = 1) {
-  return txCache.get(`${transactionListKey(params)}:${page}`) ?? null
+  const entry = txCache.get(`${transactionListKey(params)}:${page}`) ?? null
+  if (!entry) return null
+  return { ...entry, rows: entry.rows.map(normalizeTransactionRow) }
 }
 
 export function peekTransactionCustomers() {

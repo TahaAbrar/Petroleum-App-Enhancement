@@ -337,7 +337,7 @@ export function SearchableCustomerFilter({
                   setOpen(false)
                 }}
               >
-                All customers
+                {placeholder === 'Search customer...' ? 'All customers' : placeholder}
               </button>
             </li>
             {filtered.map((row) => {

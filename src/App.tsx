@@ -24,6 +24,7 @@ export default function App() {
           <Route path="/transactions" element={<Dashboard />} />
           <Route path="/reports" element={<Dashboard />} />
           <Route path="/chart-of-accounts" element={<Dashboard />} />
+          <Route path="/chart-of-accounts/account/:accid" element={<Dashboard />} />
         </Route>
 
         <Route element={<RoleRoute allow={['Accountant']} />}>
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="/accountant/transactions" element={<AccountantDashboard />} />
           <Route path="/accountant/reports" element={<AccountantDashboard />} />
           <Route path="/accountant/chart-of-accounts" element={<AccountantDashboard />} />
+          <Route path="/accountant/chart-of-accounts/account/:accid" element={<AccountantDashboard />} />
         </Route>
 
         <Route element={<RoleRoute allow={['User']} />}>
@@ -42,6 +44,7 @@ export default function App() {
           <Route path="/user/transactions" element={<UserDashboard />} />
           <Route path="/user/reports" element={<UserDashboard />} />
           <Route path="/user/chart-of-accounts" element={<UserDashboard />} />
+          <Route path="/user/chart-of-accounts/account/:accid" element={<UserDashboard />} />
         </Route>
 
         <Route element={<ProtectedRoute />}>

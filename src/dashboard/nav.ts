@@ -2,17 +2,17 @@ import type { BottomNavItem, NavItem, PortalRole } from './types'
 
 const NAV_BASE: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'grid', path: '/dashboard' },
-  { id: 'customers', label: 'Customers', icon: 'users', path: '/customers' },
+  { id: 'chartOfAccounts', label: 'Chart of Accounts', icon: 'ledger', path: '/chart-of-accounts' },
+  { id: 'customers', label: 'Search Account', icon: 'users', path: '/customers' },
   { id: 'credit', label: 'Credit', icon: 'credit', path: '/credit' },
   { id: 'debit', label: 'Debit', icon: 'debit', path: '/debit' },
   { id: 'transactions', label: 'Transactions', icon: 'swap', path: '/transactions' },
   { id: 'reports', label: 'Reports', icon: 'doc', path: '/reports' },
-  { id: 'chartOfAccounts', label: 'Chart of Accounts', icon: 'ledger', path: '/chart-of-accounts' },
 ]
 
 const BOTTOM_BASE = [
   { id: 'home', label: 'Home', path: '/dashboard', icon: 'home' },
-  { id: 'customers', label: 'Customers', path: '/customers', icon: 'users' },
+  { id: 'customers', label: 'Search Account', path: '/customers', icon: 'users' },
   { id: 'fab', label: 'Add', path: '/credit', icon: 'plus' },
   { id: 'transactions', label: 'Txns', path: '/transactions', icon: 'swap' },
   { id: 'reports', label: 'Reports', path: '/reports', icon: 'doc' },

@@ -1,16 +1,19 @@
-import { useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { applyDateRange, DateRangeFilter, MenuFilter, SearchableCustomerFilter } from './filters'
+import { LoadingHint } from './loading'
 import {
-  PRODUCT_SUMMARY,
-  REPORT_CUSTOMERS,
-  REPORT_DATE_LABEL,
-  REPORT_PRODUCTS,
-  REPORT_RECENT_TX,
-  REPORT_SUMMARY,
-  REPORT_TYPES,
-  TOP_CUSTOMERS,
-} from './reportsData'
-import { panel, selectBtn } from './styles'
+  fetchReportFilters,
+  fetchReportProducts,
+  fetchReportRecent,
+  fetchReportSummary,
+  formatReportPkr,
+  type ReportCustomer,
+  type ReportProductRow,
+  type ReportRecentTx,
+  type ReportSummary,
+} from './reports'
+import { panel } from './styles'
 import { toast } from '../toast'
 
 type Props = {
@@ -19,20 +22,128 @@ type Props = {
   searchQuery?: string
 }
 
+const ALL_TYPES = 'All Types'
+const ALL_CUSTOMERS = 'All Customers'
+const ALL_PRODUCTS = 'All Products'
+
 export function ReportsPage({ homePath, txPath }: Props) {
   const navigate = useNavigate()
-  const [reportType, setReportType] = useState<string>(REPORT_TYPES[0])
-  const [customer, setCustomer] = useState<string>(REPORT_CUSTOMERS[0])
-  const [product, setProduct] = useState<string>(REPORT_PRODUCTS[0])
-  const [dateLabel] = useState(REPORT_DATE_LABEL)
+
+  const [types, setTypes] = useState<string[]>([])
+  const [products, setProducts] = useState<string[]>([])
+  const [customers, setCustomers] = useState<ReportCustomer[]>([])
+
+  const [reportType, setReportType] = useState(ALL_TYPES)
+  const [customerKey, setCustomerKey] = useState('')
+  const [product, setProduct] = useState(ALL_PRODUCTS)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+
+  const [summary, setSummary] = useState<ReportSummary | null>(null)
+  const [productRows, setProductRows] = useState<ReportProductRow[]>([])
+  const [recentTx, setRecentTx] = useState<ReportRecentTx[]>([])
+
+  const [filtersLoading, setFiltersLoading] = useState(true)
+  const [loading, setLoading] = useState(true)
+
+  const selectedAccid = useMemo(() => {
+    if (!customerKey) return '' as const
+    const n = Number(customerKey)
+    return Number.isFinite(n) && n > 0 ? n : ('' as const)
+  }, [customerKey])
+
+  const filterParams = useMemo(
+    () => ({
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+      accid: selectedAccid,
+      type: reportType === ALL_TYPES ? '' : reportType,
+      product: product === ALL_PRODUCTS ? '' : product,
+    }),
+    [dateFrom, dateTo, selectedAccid, reportType, product],
+  )
+
+  const periodLabel = useMemo(() => {
+    if (dateFrom && dateTo) return `${dateFrom} – ${dateTo}`
+    if (dateFrom) return `From ${dateFrom}`
+    if (dateTo) return `Until ${dateTo}`
+    return 'All dates in ledger'
+  }, [dateFrom, dateTo])
+
+  const loadReport = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true)
+    try {
+      const [summaryData, productsData, recentData] = await Promise.all([
+        fetchReportSummary(filterParams, signal),
+        fetchReportProducts(filterParams, signal),
+        fetchReportRecent(filterParams, signal),
+      ])
+      if (signal?.aborted) return
+      setSummary(summaryData)
+      setProductRows(productsData)
+      setRecentTx(recentData)
+    } catch (err) {
+      if (signal?.aborted) return
+      toast.error(err instanceof Error ? err.message : 'Could not load report')
+    } finally {
+      if (!signal?.aborted) setLoading(false)
+    }
+  }, [filterParams])
+
+  useEffect(() => {
+    const ac = new AbortController()
+    setFiltersLoading(true)
+    fetchReportFilters(ac.signal)
+      .then((data) => {
+        setTypes(data.types)
+        setProducts(data.products)
+        setCustomers(data.customers)
+        if (data.defaultDateFrom) setDateFrom(data.defaultDateFrom)
+        if (data.defaultDateTo) setDateTo(data.defaultDateTo)
+      })
+      .catch((err) => {
+        if (ac.signal.aborted) return
+        toast.error(err instanceof Error ? err.message : 'Could not load report filters')
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setFiltersLoading(false)
+      })
+    return () => ac.abort()
+  }, [])
+
+  useEffect(() => {
+    if (filtersLoading) return
+    const ac = new AbortController()
+    void loadReport(ac.signal)
+    return () => ac.abort()
+  }, [filtersLoading, loadReport])
 
   function generate() {
-    toast.success('Report generated for selected filters.')
+    void loadReport()
+    toast.success('Report updated for selected filters.')
   }
+
+  const typeMenuOptions = useMemo(
+    () => [
+      { value: '', label: ALL_TYPES },
+      ...types.map((t) => ({ value: t, label: t })),
+    ],
+    [types],
+  )
+  const productMenuOptions = useMemo(
+    () => [
+      { value: '', label: ALL_PRODUCTS },
+      ...products.map((p) => ({ value: p, label: p })),
+    ],
+    [products],
+  )
+  const customerMenuList = useMemo(
+    () => customers.map((c) => ({ accid: c.accid, name: c.name, slug: String(c.accid) })),
+    [customers],
+  )
 
   return (
     <div className="flex flex-col gap-3.5 lg:gap-4">
-      {/* Title */}
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="m-0 text-[1.45rem] font-extrabold tracking-[-0.03em] text-ink lg:text-[1.65rem]">
@@ -57,35 +168,72 @@ export function ReportsPage({ homePath, txPath }: Props) {
         </button>
       </div>
 
-      {/* Filters */}
-      <section className={`${panel} rounded-2xl p-4 lg:p-5`} aria-label="Report filters">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_1.2fr_1fr_1fr_auto]">
-          <FieldSelect
-            label="Report Type"
-            value={reportType}
-            onChange={setReportType}
-            options={[...REPORT_TYPES]}
-          />
-          <FieldDate label="Date Range" value={dateLabel} />
-          <FieldSelect
-            label="Customer"
-            value={customer}
-            onChange={setCustomer}
-            options={[...REPORT_CUSTOMERS]}
-          />
-          <div className="hidden xl:block">
-            <FieldSelect
-              label="Product / Service"
-              value={product}
-              onChange={setProduct}
-              options={[...REPORT_PRODUCTS]}
+      <section
+        className={`${panel} relative z-30 overflow-visible rounded-2xl p-4 lg:p-5`}
+        aria-label="Report filters"
+      >
+        <div className="grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2 xl:grid-cols-[1fr_1.2fr_1fr_1fr_auto]">
+          <label className="relative z-10 flex min-w-0 flex-col gap-1.5 overflow-visible">
+            <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">Report Type</span>
+            <MenuFilter
+              fullWidth
+              icon="type"
+              value={reportType === ALL_TYPES ? '' : reportType}
+              placeholder={ALL_TYPES}
+              ariaLabel="Filter by report type"
+              options={typeMenuOptions}
+              onChange={(next) => setReportType(next || ALL_TYPES)}
+            />
+          </label>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">Date Range</span>
+            <DateRangeFilter
+              from={dateFrom}
+              to={dateTo}
+              grouped
+              fullWidth
+              onFromChange={(next) => {
+                const range = applyDateRange('from', next, dateFrom, dateTo)
+                setDateFrom(range.from)
+                setDateTo(range.to)
+              }}
+              onToChange={(next) => {
+                const range = applyDateRange('to', next, dateFrom, dateTo)
+                setDateFrom(range.from)
+                setDateTo(range.to)
+              }}
             />
           </div>
+          <label className="relative z-20 flex min-w-0 flex-col gap-1.5 overflow-visible">
+            <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">Customer</span>
+            <SearchableCustomerFilter
+              value={customerKey}
+              customers={customerMenuList}
+              placeholder={ALL_CUSTOMERS}
+              ariaLabel="Filter by customer"
+              onChange={setCustomerKey}
+            />
+          </label>
+          <label className="relative z-10 hidden min-w-0 flex-col gap-1.5 overflow-visible xl:flex">
+            <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">
+              Product / Service
+            </span>
+            <MenuFilter
+              fullWidth
+              icon="status"
+              value={product === ALL_PRODUCTS ? '' : product}
+              placeholder={ALL_PRODUCTS}
+              ariaLabel="Filter by product"
+              options={productMenuOptions}
+              onChange={(next) => setProduct(next || ALL_PRODUCTS)}
+            />
+          </label>
           <div className="flex items-end sm:col-span-2 xl:col-span-1">
             <button
               type="button"
               onClick={generate}
-              className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-0 bg-fuel px-4 py-2.5 text-[0.85rem] font-bold text-ink shadow-[0_4px_12px_rgba(245,197,24,0.28)] hover:brightness-95"
+              disabled={loading || filtersLoading}
+              className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-0 bg-fuel px-4 py-2.5 text-[0.85rem] font-bold text-ink shadow-[0_4px_12px_rgba(245,197,24,0.28)] hover:brightness-95 disabled:opacity-60"
             >
               <ChartIcon />
               Generate Report
@@ -94,229 +242,130 @@ export function ReportsPage({ homePath, txPath }: Props) {
         </div>
       </section>
 
-      {/* Summary cards */}
-      <section
-        className="grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-4"
-        aria-label="Report summary"
-      >
-        <KpiCard
-          label="Total Credit"
-          value={`${REPORT_SUMMARY.totalCredit.value} PKR`}
-          change={REPORT_SUMMARY.totalCredit.change}
-          changeFull={REPORT_SUMMARY.totalCredit.changeFull}
-          tone="up"
-          iconBg="bg-credit-bg text-credit"
-          icon="down"
-        />
-        <KpiCard
-          label="Total Debit"
-          value={`${REPORT_SUMMARY.totalDebit.value} PKR`}
-          change={REPORT_SUMMARY.totalDebit.change}
-          changeFull={REPORT_SUMMARY.totalDebit.changeFull}
-          tone="down"
-          iconBg="bg-debit-bg text-debit"
-          icon="up"
-        />
-        <KpiCard
-          label="Net Flow"
-          value={`${REPORT_SUMMARY.netFlow.value} PKR`}
-          change={REPORT_SUMMARY.netFlow.change}
-          changeFull={REPORT_SUMMARY.netFlow.changeFull}
-          tone="up"
-          iconBg="bg-fuel-soft text-[#c99700]"
-          icon="wallet"
-        />
-        <KpiCard
-          label="Total Transactions"
-          value={REPORT_SUMMARY.totalTx.value}
-          change={REPORT_SUMMARY.totalTx.change}
-          changeFull={REPORT_SUMMARY.totalTx.changeFull}
-          tone="up"
-          iconBg="bg-[#e8f0fe] text-[#2563eb]"
-          icon="doc"
-        />
-      </section>
-
-      {/* Desktop tables */}
-      <section className="hidden gap-4 xl:grid xl:grid-cols-2" aria-label="Report tables">
-        <article className={`${panel} rounded-2xl p-5`}>
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="m-0 text-[0.95rem] font-extrabold">Top Customers by Net Flow</h2>
-            <PeriodSelect />
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[420px] border-collapse">
-              <thead>
-                <tr>
-                  {['#', 'Customer', 'Total Credit (PKR)', 'Total Debit (PKR)', 'Net Flow (PKR)'].map(
-                    (h) => (
-                      <Th key={h}>{h}</Th>
-                    ),
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {TOP_CUSTOMERS.map((row) => (
-                  <tr key={row.rank} className="hover:bg-[#fcfcfd]">
-                    <Td>{row.rank}</Td>
-                    <Td className="font-semibold text-ink">{row.name}</Td>
-                    <Td>{row.credit}</Td>
-                    <Td>{row.debit}</Td>
-                    <Td className={row.netPositive ? 'font-bold text-credit' : 'font-bold text-debit'}>
-                      {row.net}
-                    </Td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </article>
-
-        <article className={`${panel} rounded-2xl p-5`}>
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="m-0 text-[0.95rem] font-extrabold">Product / Service Summary</h2>
-            <PeriodSelect />
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[380px] border-collapse">
-              <thead>
-                <tr>
-                  {['Product / Service', 'Total Credit (PKR)', 'Total Debit (PKR)', 'Net Flow (PKR)'].map(
-                    (h) => (
-                      <Th key={h}>{h}</Th>
-                    ),
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {PRODUCT_SUMMARY.map((row) => (
-                  <tr key={row.product} className="hover:bg-[#fcfcfd]">
-                    <Td className="font-semibold text-ink">{row.product}</Td>
-                    <Td>{row.credit}</Td>
-                    <Td>{row.debit}</Td>
-                    <Td className="font-bold text-credit">{row.net}</Td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </article>
-      </section>
-
-      {/* Mobile recent transactions */}
-      <section className={`${panel} rounded-2xl p-4 xl:hidden`} aria-label="Recent transactions">
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <h2 className="m-0 text-[1rem] font-extrabold text-ink">Recent Transactions</h2>
-          <button
-            type="button"
-            onClick={() => navigate(txPath)}
-            className="cursor-pointer border-0 bg-transparent text-[0.8rem] font-bold text-[#c99700]"
+      {loading && !summary ? (
+        <LoadingHint label="Loading report…" />
+      ) : (
+        <>
+          <section
+            className="grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-4"
+            aria-label="Report summary"
           >
-            View All
-          </button>
-        </div>
-        <ul className="m-0 flex list-none flex-col p-0">
-          {REPORT_RECENT_TX.map((row) => {
-            const isCredit = row.type === 'Credit'
-            return (
-              <li
-                key={row.id}
-                className="flex items-center gap-2 border-b border-[#ECEEF2] py-3.5 last:border-b-0"
+            <KpiCard
+              label="Total Credit"
+              value={`${formatReportPkr(summary?.totalCredit ?? 0)} PKR`}
+              change={periodLabel}
+              changeFull={periodLabel}
+              tone="up"
+              iconBg="bg-credit-bg text-credit"
+              icon="down"
+            />
+            <KpiCard
+              label="Total Debit"
+              value={`${formatReportPkr(summary?.totalDebit ?? 0)} PKR`}
+              change={periodLabel}
+              changeFull={periodLabel}
+              tone="down"
+              iconBg="bg-debit-bg text-debit"
+              icon="up"
+            />
+            <KpiCard
+              label="Net Flow"
+              value={`${formatReportPkr(summary?.netFlow ?? 0)} PKR`}
+              change={periodLabel}
+              changeFull={periodLabel}
+              tone={(summary?.netFlow ?? 0) >= 0 ? 'up' : 'down'}
+              iconBg="bg-fuel-soft text-[#c99700]"
+              icon="wallet"
+            />
+            <KpiCard
+              label="Total Transactions"
+              value={String(summary?.totalTx ?? 0)}
+              change={periodLabel}
+              changeFull={periodLabel}
+              tone="up"
+              iconBg="bg-[#e8f0fe] text-[#2563eb]"
+              icon="doc"
+            />
+          </section>
+
+          <section className="hidden xl:block" aria-label="Report tables">
+            <article className={`${panel} rounded-2xl p-5`}>
+              <h2 className="mb-3 text-[0.95rem] font-extrabold">Product / Service Summary</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[380px] border-collapse">
+                  <thead>
+                    <tr>
+                      {['Product / Service', 'Total Credit (PKR)', 'Total Debit (PKR)', 'Net Flow (PKR)'].map(
+                        (h) => (
+                          <Th key={h}>{h}</Th>
+                        ),
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productRows.map((row) => (
+                      <tr key={row.product} className="hover:bg-[#fcfcfd]">
+                        <Td className="font-semibold text-ink">{row.product}</Td>
+                        <Td>{row.credit}</Td>
+                        <Td>{row.debit}</Td>
+                        <Td className="font-bold text-credit">{row.net}</Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+
+          <section className={`${panel} rounded-2xl p-4 xl:hidden`} aria-label="Recent transactions">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h2 className="m-0 text-[1rem] font-extrabold text-ink">Recent Transactions</h2>
+              <button
+                type="button"
+                onClick={() => navigate(txPath)}
+                className="cursor-pointer border-0 bg-transparent text-[0.8rem] font-bold text-[#c99700]"
               >
-                <div className="min-w-0 flex-1">
-                  <p className="m-0 text-[0.88rem] font-extrabold text-ink">{row.id}</p>
-                  <p className="mt-0.5 mb-0 text-[0.72rem] font-medium text-muted">{row.when}</p>
-                </div>
-                <span
-                  className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-[0.68rem] font-bold ${
-                    isCredit ? 'bg-credit-bg text-credit' : 'bg-debit-bg text-debit'
-                  }`}
-                >
-                  {row.type}
-                </span>
-                <p
-                  className={`m-0 shrink-0 text-right text-[0.82rem] font-extrabold ${
-                    isCredit ? 'text-credit' : 'text-debit'
-                  }`}
-                >
-                  {row.amount} PKR
-                </p>
-              </li>
-            )
-          })}
-        </ul>
-      </section>
+                View All
+              </button>
+            </div>
+            {recentTx.length === 0 ? (
+              <p className="my-6 text-center text-sm font-semibold text-muted">No transactions in this range.</p>
+            ) : (
+              <ul className="m-0 flex list-none flex-col p-0">
+                {recentTx.map((row) => {
+                  const isCredit = row.type === 'Credit'
+                  return (
+                    <li
+                      key={row.id}
+                      className="flex items-center gap-2 border-b border-[#ECEEF2] py-3.5 last:border-b-0"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="m-0 text-[0.88rem] font-extrabold text-ink">{row.id}</p>
+                        <p className="mt-0.5 mb-0 text-[0.72rem] font-medium text-muted">{row.when}</p>
+                      </div>
+                      <span
+                        className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-[0.68rem] font-bold ${
+                          isCredit ? 'bg-credit-bg text-credit' : 'bg-debit-bg text-debit'
+                        }`}
+                      >
+                        {row.type}
+                      </span>
+                      <p
+                        className={`m-0 shrink-0 text-right text-[0.82rem] font-extrabold ${
+                          isCredit ? 'text-credit' : 'text-debit'
+                        }`}
+                      >
+                        {row.amount} PKR
+                      </p>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </section>
+        </>
+      )}
     </div>
-  )
-}
-
-function FieldSelect({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  options: string[]
-}) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">{label}</span>
-      <div className="relative">
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full cursor-pointer appearance-none rounded-xl border border-line bg-[#fafbfc] py-2.5 pr-9 pl-3 text-[0.85rem] font-medium text-ink outline-none focus:border-fuel"
-        >
-          {options.map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
-        <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted">
-          <ChevronDown />
-        </span>
-      </div>
-    </label>
-  )
-}
-
-function FieldDate({ label, value }: { label: string; value: string }) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">{label}</span>
-      <div className="relative">
-        <input
-          type="text"
-          readOnly
-          value={value}
-          className="w-full rounded-xl border border-line bg-[#fafbfc] py-2.5 pr-10 pl-3 text-[0.85rem] font-medium text-ink outline-none"
-        />
-        <svg
-          className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted"
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          aria-hidden="true"
-        >
-          <rect x="3.5" y="5" width="17" height="15" rx="2" stroke="currentColor" strokeWidth="1.6" />
-          <path d="M8 3.5v3M16 3.5v3M3.5 9.5h17" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
-      </div>
-    </label>
-  )
-}
-
-function PeriodSelect() {
-  return (
-    <button type="button" className={`${selectBtn} text-[0.7rem]`}>
-      This Month
-      <ChevronDown size={14} />
-    </button>
   )
 }
 
@@ -352,7 +401,7 @@ function KpiCard({
             tone === 'up' ? 'text-credit' : 'text-debit'
           }`}
         >
-          <span className="lg:hidden">↗ {change}</span>
+          <span className="lg:hidden">{change}</span>
           <span className="hidden lg:inline">{changeFull}</span>
         </span>
       </div>
