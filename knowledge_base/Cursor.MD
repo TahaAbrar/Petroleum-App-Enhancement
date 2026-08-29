@@ -161,6 +161,27 @@ Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info
 - **FE:** `src/lib/api.ts` sends Bearer + key; `customers.ts` is live helpers (mock array removed)
 - **Balance:** `ISNULL(OpBal,0) + SUM(Debit) - SUM(Credit)`; history running balance via window on Trid; include Posted + NULL ledger rows
 
+## Reports page (2026-08-28, live)
+
+**Status:** Live SQL via `GET /api/reports/*`. Dummy `reportsData.ts` unused.
+
+### Files
+- `server/src/reportsRoutes.js` — filters, summary, product breakdown, recent tx (SELECT on `Leger` + `AccReg`)
+- `src/dashboard/reports.ts` — FE API helpers
+- `src/dashboard/ReportsPage.tsx` — same UI theme; live KPIs, filters, product table, mobile recent tx
+
+### Filters (from DB)
+- **Report Type** — `Leger.Type` (Slip, DSales, JV, Purchases, Adjustment, Sales) + All Types
+- **Date Range** — `Leger.Dated` (defaults to min/max in DB)
+- **Customer** — `AccReg` (70 accounts) + All Customers
+- **Product** — PMG, HSD, HO, Cash, Other + All Products (desktop)
+
+### Data shown
+- KPIs: SUM(Credit), SUM(Debit), Net Flow, COUNT (`Leger`)
+- Product table: **Stock In / Stock Out / Net** from `Stockleger` + `ItemReg`, current stock from `StockValue`; Cash/Other from `Leger`
+- Product filter: all `ItemReg` items + Cash + Other
+- Mobile: top 5 recent ledger rows (filtered)
+
 ## Reports page (2026-08-26)
 - `src/dashboard/ReportsPage.tsx` + `reportsData.ts` — dummy UI
 - Desktop: filters (+ product), Export, Generate, 4 KPIs, Product / Service Summary table only (no period selector on card; Top Customers removed 2026-08-28)
