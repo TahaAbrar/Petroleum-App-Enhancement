@@ -77,7 +77,6 @@ export default function LoginPage() {
   const [phase, setPhase] = useState<Phase>('intro')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [remember, setRemember] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -110,9 +109,6 @@ export default function LoginPage() {
         redirectTo: data.redirectTo,
       })
       prefetchDashboardPages()
-      if (!remember) {
-        // sessionStorage already; remember only affects session duration UX for now
-      }
       toast.success('Login successful. Welcome back.')
       navigate(data.redirectTo, { replace: true })
     } catch (err) {
@@ -268,24 +264,6 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              <div
-                className="animate-stagger mt-0.5 flex flex-wrap items-center justify-between gap-3 opacity-0"
-                style={{ animationDelay: '0.18s' }}
-              >
-                <label className="inline-flex cursor-pointer items-center gap-2 text-[0.8125rem] font-medium text-muted select-none">
-                  <input
-                    type="checkbox"
-                    checked={remember}
-                    onChange={(e) => setRemember(e.target.checked)}
-                    className="size-4 accent-fuel"
-                  />
-                  Remember me
-                </label>
-                <a className="text-[0.8125rem] font-semibold text-navy no-underline hover:text-orange" href="#forgot">
-                  Forgot password?
-                </a>
-              </div>
-
               {error ? (
                 <p className="m-0 rounded-xl border border-debit/20 bg-debit-bg px-3 py-2 text-center text-[0.8rem] font-semibold text-debit" role="alert">
                   {error}
@@ -296,30 +274,11 @@ export default function LoginPage() {
                 type="submit"
                 disabled={submitting}
                 className="animate-stagger relative mt-1 w-full overflow-hidden rounded-[0.95rem] border-0 bg-linear-to-b from-fuel to-fuel-deep px-5 py-[0.95rem] text-[0.95rem] font-bold text-ink shadow-[0_8px_20px_rgba(245,197,24,0.35)] transition hover:-translate-y-px hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70 opacity-0"
-                style={{ animationDelay: '0.24s' }}
+                style={{ animationDelay: '0.18s' }}
               >
                 {submitting ? 'Signing in…' : 'Login'}
               </button>
             </form>
-
-            <div
-              className="animate-stagger my-4 flex items-center gap-3 text-[0.75rem] font-semibold tracking-[0.06em] text-muted uppercase opacity-0"
-              style={{ animationDelay: '0.3s' }}
-            >
-              <span className="h-px flex-1 bg-line" />
-              Secure access
-              <span className="h-px flex-1 bg-line" />
-            </div>
-
-            <p
-              className="animate-stagger m-0 text-center text-[0.8125rem] text-muted opacity-0"
-              style={{ animationDelay: '0.36s' }}
-            >
-              New to FuelLedger?{' '}
-              <a className="font-bold text-navy no-underline hover:text-orange" href="#register">
-                Request access
-              </a>
-            </p>
           </div>
 
           <p className="mt-4 text-center text-xs text-[#9aa1ab]">
