@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FuelLedgerLogo } from '../components/FuelLedgerLogo'
+import { AliComzLogo } from '../components/AliComzLogo'
 import { apiLogin, setSession } from '../lib/auth'
 import { prefetchDashboardPages } from '../dashboard/pageCache'
 import { toast } from '../toast'
@@ -162,24 +162,16 @@ export default function LoginPage() {
             <span className="absolute inset-[12%] animate-ring rounded-full border-[1.5px] border-orange/30 opacity-0 [animation-delay:0.75s]" />
           </div>
 
-          <div className="relative z-[1] w-[min(46vw,168px)] drop-shadow-[0_14px_28px_rgba(26,47,75,0.14)]">
-            <FuelLedgerLogo animated className="block h-auto w-full" />
+          <div className="relative z-[1] w-[min(58vw,220px)] drop-shadow-[0_14px_28px_rgba(26,47,75,0.14)]">
+            <AliComzLogo animated className="block h-auto w-full rounded-2xl" />
           </div>
 
-          <div className="relative z-[1]">
-            <h1 className="m-0 text-[clamp(1.75rem,5vw,2.35rem)] font-extrabold tracking-[-0.03em] text-ink">
-              {'FuelLedger'.split('').map((ch, i) => (
-                <span
-                  key={`${ch}-${i}`}
-                  className="inline-block animate-letter opacity-0"
-                  style={{ animationDelay: `${1.15 + i * 0.045}s` }}
-                >
-                  {ch}
-                </span>
-              ))}
-            </h1>
-            <p className="mt-1.5 animate-fade-up text-[0.95rem] font-medium text-muted opacity-0 [animation-delay:1.55s]">
-              Petroleum Accounting System
+          <div className="relative z-[1] max-w-[22rem] px-2">
+            <p className="m-0 animate-fade-up text-[0.95rem] font-semibold tracking-[-0.01em] text-ink opacity-0 [animation-delay:1.2s]">
+              AliComz Software Company
+            </p>
+            <p className="mt-1.5 animate-fade-up text-[0.88rem] font-medium leading-snug text-muted opacity-0 [animation-delay:1.45s]">
+              Windows accounting software · Web &amp; mobile apps
             </p>
           </div>
 
@@ -206,12 +198,12 @@ export default function LoginPage() {
         <section className="relative z-[2] w-full max-w-[420px] animate-login-in" aria-label="Sign in">
           <div className="rounded-[1.35rem] border border-white/70 bg-white p-[clamp(1.5rem,4vw,2.25rem)] shadow-auth">
             <header className="mb-7 flex flex-col items-center gap-3.5 text-center">
-              <div className="grid size-[76px] place-items-center">
-                <FuelLedgerLogo className="h-auto w-[72px] animate-float drop-shadow-[0_6px_14px_rgba(26,47,75,0.12)]" />
+              <div className="grid size-[88px] place-items-center overflow-hidden rounded-2xl">
+                <AliComzLogo className="h-auto w-[88px] animate-float drop-shadow-[0_6px_14px_rgba(26,47,75,0.12)]" />
               </div>
               <div>
                 <h1 className="m-0 text-[1.55rem] font-extrabold tracking-[-0.03em]">Welcome back</h1>
-                <p className="mt-1 text-sm font-medium text-muted">Sign in to FuelLedger</p>
+                <p className="mt-1 text-sm font-medium text-muted">Sign in to AliComz</p>
               </div>
             </header>
 
@@ -282,7 +274,7 @@ export default function LoginPage() {
           </div>
 
           <p className="mt-4 text-center text-xs text-[#9aa1ab]">
-            © {new Date().getFullYear()} FuelLedger · Petroleum Accounting
+            © {new Date().getFullYear()} AliComz · Accounting Software Solutions
           </p>
         </section>
       )}

@@ -224,7 +224,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
       </div>
 
       <section
-        className={`${panel} relative z-30 overflow-visible rounded-2xl p-4 lg:p-5`}
+        className={`${panel} relative z-10 overflow-visible rounded-2xl p-4 lg:p-5`}
         aria-label="Filters"
       >
         <div className="grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2 xl:grid-cols-[1.2fr_1.4fr_1fr]">
