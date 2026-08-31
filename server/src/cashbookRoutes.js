@@ -210,6 +210,8 @@ const saveSchema = z.object({
   creditAccid: z.coerce.number().int().positive().max(2_147_483_647),
   description: z.string().trim().min(1).max(500),
   amount: z.coerce.number().positive().max(1_000_000_000_000),
+  /** Optional manual voucher ref → Leger.MVNo. VNo is always auto. */
+  mvno: z.string().trim().max(50).optional().default(''),
 })
 
 cashbookRouter.post('/entries', async (req, res) => {
@@ -218,7 +220,7 @@ cashbookRouter.post('/entries', async (req, res) => {
     return res.status(400).json({ ok: false, message: 'Invalid request' })
   }
 
-  const { voucherType, debitAccid, creditAccid, description, amount } = parsed.data
+  const { voucherType, debitAccid, creditAccid, description, amount, mvno } = parsed.data
   if (debitAccid === creditAccid) {
     return res.status(400).json({ ok: false, message: 'Debit and credit accounts must be different' })
   }
@@ -252,8 +254,10 @@ cashbookRouter.post('/entries', async (req, res) => {
     const dno = await nextDNo(pool, bizId)
     const debitName = cleanText(debitAcc.AccName) || '—'
     const creditName = cleanText(creditAcc.AccName) || '—'
-    const debitBal = roundMoney(money(debitAcc.Balance) + amount)
-    const creditBal = roundMoney(money(creditAcc.Balance) - amount)
+    // Store Acc Bal box value as-is (current balance shown on form)
+    const debitBal = roundMoney(money(debitAcc.Balance))
+    const creditBal = roundMoney(money(creditAcc.Balance))
+    const mvnoValue = cleanText(mvno).slice(0, 50)
     const descDebit = `${description} From ${creditName}`.slice(0, 1500)
     const descCredit = `${description} From ${debitName}`.slice(0, 1500)
 
@@ -269,7 +273,7 @@ cashbookRouter.post('/entries', async (req, res) => {
       debitReq.input('refNo', sql.NVarChar(50), 'WEB')
       debitReq.input('debit', sql.Money, amount)
       debitReq.input('description', sql.NVarChar(1500), descDebit)
-      debitReq.input('mvno', sql.NVarChar(50), '')
+      debitReq.input('mvno', sql.NVarChar(50), mvnoValue)
       debitReq.input('dno', sql.Int, dno)
       debitReq.input('bal', sql.NVarChar(50), String(debitBal))
       debitReq.input('bizId', sql.Int, bizId)
@@ -302,7 +306,7 @@ cashbookRouter.post('/entries', async (req, res) => {
       creditReq.input('refNo', sql.NVarChar(50), 'WEB')
       creditReq.input('credit', sql.Money, amount)
       creditReq.input('description', sql.NVarChar(1500), descCredit)
-      creditReq.input('mvno', sql.NVarChar(50), '')
+      creditReq.input('mvno', sql.NVarChar(50), mvnoValue)
       creditReq.input('dno', sql.Int, dno)
       creditReq.input('bal', sql.NVarChar(50), String(creditBal))
       creditReq.input('bizId', sql.Int, bizId)

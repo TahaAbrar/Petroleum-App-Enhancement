@@ -270,9 +270,53 @@ select {
   font: inherit;
 }
 
-/* SVG logo piece-by-piece intro (targets internal SVG classes) */
+/* SVG logo piece-by-piece intro (legacy FuelLedger mark) */
 .fl-logo {
   overflow: visible;
+}
+
+/* AliComz image logo — intro entrance (mirrors previous timing) */
+.ac-logo {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.ac-logo--animated {
+  opacity: 0;
+  transform: scale(0.86) translateY(12px);
+  transform-origin: center;
+  animation:
+    ac-logo-in 0.85s 0.2s cubic-bezier(0.22, 1, 0.36, 1) forwards,
+    ac-logo-glow 1.1s 0.35s ease-out both;
+}
+
+@keyframes ac-logo-in {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ac-logo-glow {
+  0% {
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  45% {
+    filter: drop-shadow(0 10px 22px rgba(184, 148, 74, 0.28));
+  }
+  100% {
+    filter: drop-shadow(0 14px 26px rgba(26, 47, 75, 0.12));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ac-logo--animated {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
 }
 
 .fl-logo--animated .fl-logo__glow {
