@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { findUserByUsername } from './db.js'
+import { findCustomerByWebUser, findUserByUsername } from './db.js'
 import {
   clearLoginAttempts,
   dashboardPathForRole,
@@ -27,6 +27,13 @@ function clientIp(req) {
   return req.ip || req.socket?.remoteAddress || 'unknown'
 }
 
+function isDisabledStatus(value) {
+  const status = String(value || '')
+    .trim()
+    .toLowerCase()
+  return ['inactive', 'disabled', 'blocked', 'lock', 'locked'].includes(status)
+}
+
 export async function loginHandler(req, res) {
   const parsed = loginSchema.safeParse(req.body)
   if (!parsed.success) {
@@ -49,9 +56,13 @@ export async function loginHandler(req, res) {
     })
   }
 
-  let user
+  let staffUser = null
+  let customer = null
   try {
-    user = await findUserByUsername(username)
+    staffUser = await findUserByUsername(username)
+    if (!staffUser) {
+      customer = await findCustomerByWebUser(username)
+    }
   } catch (err) {
     console.error('[auth] db error', err.message)
     return res.status(503).json({
@@ -60,12 +71,64 @@ export async function loginHandler(req, res) {
     })
   }
 
-  // Always run password compare path to reduce user-enumeration timing gaps
-  const storedPass = user?.UserPass ?? cryptoRandomDummy()
-  const passwordOk = safeEqualPassword(password, storedPass)
-  const userOk = Boolean(user)
+  // Staff (UserReg) takes precedence when username exists there
+  if (staffUser) {
+    const storedPass = staffUser.UserPass ?? cryptoRandomDummy()
+    const passwordOk = safeEqualPassword(password, storedPass)
 
-  if (!userOk || !passwordOk) {
+    if (!passwordOk) {
+      const fail = registerFailedLogin(ip, username)
+      return res.status(401).json({
+        ok: false,
+        message: 'Invalid username or password',
+        attemptsRemaining: Math.max(0, env.loginMaxAttempts - fail.fails),
+        locked: fail.locked,
+      })
+    }
+
+    if (isDisabledStatus(staffUser.Status)) {
+      return res.status(403).json({
+        ok: false,
+        message: 'Account is disabled. Contact administrator.',
+      })
+    }
+
+    clearLoginAttempts(ip, username)
+
+    const role = normalizeRole(staffUser.Type)
+    const redirectTo = dashboardPathForRole(role)
+    const token = signToken({
+      sub: String(staffUser.UserId),
+      username: staffUser.UserName,
+      role,
+    })
+
+    res.cookie('fl_token', token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: env.cookieSecure,
+      maxAge: 8 * 60 * 60 * 1000,
+      path: '/',
+    })
+
+    return res.json({
+      ok: true,
+      user: {
+        id: staffUser.UserId,
+        username: staffUser.UserName,
+        role,
+      },
+      redirectTo,
+      token,
+    })
+  }
+
+  // Customer portal — AccReg.WebUser / WebPass
+  const storedPass = customer?.WebPass ?? cryptoRandomDummy()
+  const passwordOk = safeEqualPassword(password, storedPass)
+  const customerOk = Boolean(customer)
+
+  if (!customerOk || !passwordOk) {
     const fail = registerFailedLogin(ip, username)
     return res.status(401).json({
       ok: false,
@@ -75,25 +138,24 @@ export async function loginHandler(req, res) {
     })
   }
 
-  const status = String(user.Status || '').trim().toLowerCase()
-  if (status && status !== 'active' && status !== 'null' && status !== '') {
-    // Only block if Status is explicitly inactive-like
-    if (['inactive', 'disabled', 'blocked', 'lock', 'locked'].includes(status)) {
-      return res.status(403).json({
-        ok: false,
-        message: 'Account is disabled. Contact administrator.',
-      })
-    }
+  if (isDisabledStatus(customer.Status) || isDisabledStatus(customer.WebStatus)) {
+    return res.status(403).json({
+      ok: false,
+      message: 'Account is disabled. Contact administrator.',
+    })
   }
 
   clearLoginAttempts(ip, username)
 
-  const role = normalizeRole(user.Type)
+  const role = 'Customer'
   const redirectTo = dashboardPathForRole(role)
+  const displayName = String(customer.AccName || customer.WebUser || 'Customer').trim()
   const token = signToken({
-    sub: String(user.UserId),
-    username: user.UserName,
+    sub: `c-${customer.Accid}`,
+    username: customer.WebUser,
     role,
+    accid: customer.Accid,
+    name: displayName,
   })
 
   res.cookie('fl_token', token, {
@@ -107,9 +169,11 @@ export async function loginHandler(req, res) {
   return res.json({
     ok: true,
     user: {
-      id: user.UserId,
-      username: user.UserName,
+      id: customer.Accid,
+      username: customer.WebUser,
       role,
+      accid: customer.Accid,
+      name: displayName,
     },
     redirectTo,
     token,

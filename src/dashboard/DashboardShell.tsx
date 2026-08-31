@@ -13,6 +13,8 @@ import { DebitPage } from './DebitPage'
 import { clearPageCache, prefetchDashboardPages } from './pageCache'
 import { ReportsPage } from './ReportsPage'
 import { ChartOfAccountsPage } from './ChartOfAccountsPage'
+import { CustomerPortalHome } from './CustomerPortalHome'
+import { CustomerPortalTransactions } from './CustomerPortalTransactions'
 import {
   FALLBACK_COMPANY,
   loadCompany,
@@ -43,7 +45,7 @@ export function DashboardShell({ config }: Props) {
   const companyBrandRef = useRef<HTMLDivElement>(null)
   const desktopHoverTimer = useRef<number | null>(null)
 
-  const { nav, bottomNav, homePath, txPath, roleLabel } = config
+  const { nav, bottomNav, homePath, txPath, roleLabel, kind } = config
   const customersNav = nav.find((item) => item.id === 'customers')
   const coaNav = nav.find((item) => item.id === 'chartOfAccounts')
   const active =
@@ -62,10 +64,12 @@ export function DashboardShell({ config }: Props) {
     })?.id ?? 'dashboard'
   const activeLabel = nav.find((n) => n.id === active)?.label || 'Dashboard'
   const activePath = nav.find((n) => n.id === active)?.path || homePath
-  const displayName = session?.user?.username || 'User'
+  const displayName =
+    session?.user?.name || session?.user?.username || (kind === 'customer' ? 'Customer' : 'User')
   const initial = displayName.charAt(0).toUpperCase()
   const showSection = active !== 'dashboard'
   const isCustomers = active === 'customers'
+  const isCustomerPortal = kind === 'customer'
   const shortAddress = truncateAddress(company.address)
 
   useEffect(() => {
@@ -121,9 +125,9 @@ export function DashboardShell({ config }: Props) {
   }, [location.pathname])
 
   useEffect(() => {
-    if (active !== 'dashboard') return
+    if (active !== 'dashboard' || isCustomerPortal) return
     prefetchDashboardPages()
-  }, [active])
+  }, [active, isCustomerPortal])
 
   useEffect(() => {
     if (!logoutConfirmOpen) return
@@ -409,7 +413,11 @@ export function DashboardShell({ config }: Props) {
         </header>
 
         <div className="flex flex-col gap-3.5 px-4 pb-4 pt-1 lg:gap-[1.15rem] lg:px-6 lg:pb-8 lg:pt-2">
-          {active === 'customers' ? (
+          {isCustomerPortal && active === 'dashboard' ? (
+            <CustomerPortalHome txPath={txPath} />
+          ) : isCustomerPortal && active === 'transactions' ? (
+            <CustomerPortalTransactions homePath={homePath} />
+          ) : active === 'customers' ? (
             <CustomersPage searchQuery={query} txPath={txPath} />
           ) : active === 'transactions' ? (
             <TransactionsPage homePath={homePath} searchQuery={query} />

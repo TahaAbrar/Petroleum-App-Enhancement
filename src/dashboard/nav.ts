@@ -10,6 +10,11 @@ const NAV_BASE: NavItem[] = [
   { id: 'reports', label: 'Reports', icon: 'doc', path: '/reports' },
 ]
 
+const CUSTOMER_NAV: NavItem[] = [
+  { id: 'dashboard', label: 'My Account', icon: 'grid', path: '/customer/dashboard' },
+  { id: 'transactions', label: 'My Transactions', icon: 'swap', path: '/customer/transactions' },
+]
+
 const BOTTOM_BASE = [
   { id: 'home', label: 'Home', path: '/dashboard', icon: 'home' },
   { id: 'customers', label: 'Search Account', path: '/customers', icon: 'users' },
@@ -18,6 +23,11 @@ const BOTTOM_BASE = [
   { id: 'reports', label: 'Reports', path: '/reports', icon: 'doc' },
 ] as const
 
+const CUSTOMER_BOTTOM: BottomNavItem[] = [
+  { id: 'home', label: 'Home', path: '/customer/dashboard', icon: 'home' },
+  { id: 'transactions', label: 'Txns', path: '/customer/transactions', icon: 'swap' },
+]
+
 function withPrefix(path: string, prefix: string) {
   if (!prefix) return path
   if (path === '/dashboard') return `${prefix}/dashboard`
@@ -25,6 +35,8 @@ function withPrefix(path: string, prefix: string) {
 }
 
 export function buildNav(role: PortalRole): NavItem[] {
+  if (role === 'Customer') return CUSTOMER_NAV
+
   const prefix =
     role === 'Accountant' ? '/accountant' : role === 'User' ? '/user' : ''
 
@@ -54,6 +66,8 @@ export function buildNav(role: PortalRole): NavItem[] {
 }
 
 export function buildBottomNav(role: PortalRole): BottomNavItem[] {
+  if (role === 'Customer') return CUSTOMER_BOTTOM
+
   const prefix =
     role === 'Accountant' ? '/accountant' : role === 'User' ? '/user' : ''
 
@@ -78,6 +92,7 @@ export function adminConfig() {
     bottomNav: buildBottomNav('Administrator'),
     homePath: '/dashboard',
     txPath: '/transactions',
+    kind: 'staff' as const,
   }
 }
 
@@ -90,6 +105,7 @@ export function accountantConfig() {
     bottomNav: buildBottomNav('Accountant'),
     homePath: '/accountant/dashboard',
     txPath: '/accountant/transactions',
+    kind: 'staff' as const,
   }
 }
 
@@ -102,5 +118,19 @@ export function userConfig() {
     bottomNav: buildBottomNav('User'),
     homePath: '/user/dashboard',
     txPath: '/user/transactions',
+    kind: 'staff' as const,
+  }
+}
+
+export function customerConfig() {
+  const nav = buildNav('Customer')
+  return {
+    portalTitle: 'Customer Portal',
+    roleLabel: 'Customer',
+    nav,
+    bottomNav: buildBottomNav('Customer'),
+    homePath: '/customer/dashboard',
+    txPath: '/customer/transactions',
+    kind: 'customer' as const,
   }
 }

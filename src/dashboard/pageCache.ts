@@ -127,6 +127,7 @@ export function clearPageCache() {
 
 export function prefetchDashboardPages() {
   const role = getUserRole()
+  if (role === 'Customer') return
   if (role === 'Administrator' || role === 'Accountant') {
     void loadCustomerListPage(EMPTY_CUSTOMER_FILTERS, 1, { force: true })
     void loadCustomerGroups({ force: true })

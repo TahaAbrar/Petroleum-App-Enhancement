@@ -3,7 +3,9 @@ const AUTH_KEY = 'fuelledger_auth'
 export type AuthUser = {
   id: string | number
   username: string
-  role: 'Administrator' | 'Accountant' | 'User' | string
+  role: 'Administrator' | 'Accountant' | 'User' | 'Customer' | string
+  accid?: number
+  name?: string
 }
 
 export type AuthSession = {
@@ -47,6 +49,7 @@ export function homePathForRole(role: string): string {
   const r = role.toLowerCase()
   if (r === 'administrator' || r === 'admin') return '/dashboard'
   if (r === 'accountant') return '/accountant/dashboard'
+  if (r === 'customer') return '/customer/dashboard'
   return '/user/dashboard'
 }
 

@@ -25,6 +25,8 @@ export function requireAuth(req, res, next) {
       id: payload.sub,
       username: payload.username,
       role: payload.role,
+      accid: payload.accid != null ? Number(payload.accid) : undefined,
+      name: payload.name || undefined,
     }
     return next()
   } catch {

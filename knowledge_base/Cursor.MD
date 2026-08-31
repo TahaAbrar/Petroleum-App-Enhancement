@@ -4,7 +4,7 @@
 - Repo: Petroleum-App-Enhancement (cloned into `/home/hanan/fuel-pro`)
 - Frontend: Vite + React + Tailwind (`npm run dev`) — default Vite port **5173**
 - Backend: Express API in `server/` (`npm run dev:api`) — default **PORT=4000**
-- Vite proxies `/api` → `http://127.0.0.1:4001` (`VITE_API_PROXY_TARGET`, matches `server/.env` PORT)
+- Vite proxies `/api` → `http://127.0.0.1:4002` (hardcoded in `vite.config.ts`; matches `server/.env` PORT)
 - Dev CORS allows public/LAN Origin (e.g. `http://169.58.29.84:5173`), not only localhost
 - SQL Server expected on **1433** (`DB_PORT` in `server/.env.example`)
 
@@ -229,6 +229,46 @@ Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info
 - Multiple agents: read this file before work; update after meaningful changes.
 - 2026-08-27: Public login 403 was CORS + proxy port. Vite now proxies to **4001**. Dev CORS allows `--host` public Origin. Both tmux sessions restarted.
 - `knowledge_base/` is the shared coordination folder.
+
+## Customer portal (2026-08-31)
+
+**Status:** Live. Same FuelLedger yellow theme / shell. Role-gated away from admin pages.
+
+### Login routing
+- Staff (`UserReg`): Administrator → `/dashboard`, Accountant → `/accountant/dashboard`, User → `/user/dashboard`
+- Customer (`AccReg.WebUser` + `WebPass`): → `/customer/dashboard` (role `Customer`)
+- Staff username takes precedence if the same name exists in `UserReg`
+- JWT for customers includes `accid` + display `name`; portal APIs are scoped to that Accid only
+
+### Files
+- `server/src/db.js` — `findCustomerByWebUser`
+- `server/src/authRoutes.js` — AccReg login path after UserReg miss
+- `server/src/portalRoutes.js` — `GET /api/portal/me`, `GET /api/portal/transactions`
+- `server/src/index.js` — mounts `/api/portal` for role `Customer`; company brand allows Customer
+- FE: `CustomerDashboard`, `CustomerPortalHome`, `CustomerPortalTransactions`, `portal.ts`, `usePortalHistory.ts`
+- Routes: `/customer/dashboard`, `/customer/transactions` (`App.tsx` + `RoleRoute allow=['Customer']`)
+- Nav: My Account + My Transactions only (`customerConfig`)
+
+### UI
+- My Account: profile, balances, **fuel summary** (HSD / PMG / HO / Advance / Others from Leger + BizId + optional date range), **10 recent transactions only**
+- My Transactions: full history with All / Credit / Debit tabs + date range + sort
+
+### Summary SQL (portal)
+```sql
+SELECT SUM(ISNULL(HSD,0)) AS HSD, SUM(ISNULL(PMG,0)) AS PMG, SUM(ISNULL(HO,0)) AS HO,
+       SUM(ISNULL(Cash,0)) AS Advance, SUM(ISNULL(Other,0)) AS Others
+FROM Leger WHERE Accid=@accid AND BizId=@bizId
+  AND (optional Dated from/to)
+```
+- `GET /api/portal/me` returns `customer` + `summary`
+- `GET /api/portal/summary?dateFrom&dateTo` refreshes fuel totals when dashboard date filter changes
+
+### Test credential (dev, Accid 1723 Al Ghani ps)
+- WebUser: `alghani` / WebPass: `test123` (set in AccReg for portal QA)
+
+### Security
+- Customers cannot call `/api/customers`, `/api/transactions`, COA, reports, dashboard staff APIs (403)
+- Portal SELECT never returns WebPass / Pic
 
 ## Frontend `src/` architecture (2026-08-26 exploration)
 
