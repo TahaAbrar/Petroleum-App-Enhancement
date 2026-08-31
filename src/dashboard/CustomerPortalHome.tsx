@@ -7,7 +7,6 @@ import {
   formatFilterDate,
   formatPkrAmount,
   type CustomerDetail,
-  type CustomerTransaction,
 } from './customers'
 import {
   BalanceCard,
@@ -16,18 +15,17 @@ import {
   InfoIconCard,
   PkrValue,
   StatusPill,
-  TypeBadge,
-  WhenCell,
-  Td,
 } from './customerDetails/ui'
 import { applyDateRange, DateRangeFilter } from './filters'
 import { CustomerMark } from './icons'
 import { LoadingHint } from './loading'
+import { PortalTxTable } from './PortalTxTable'
 import {
   fetchPortalMe,
   fetchPortalSummary,
   fetchPortalTransactions,
   type PortalFuelSummary,
+  type PortalTransaction,
 } from './portal'
 import { panel } from './styles'
 
@@ -54,7 +52,7 @@ export function CustomerPortalHome({ txPath }: Props) {
   const [summaryLoading, setSummaryLoading] = useState(true)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [recent, setRecent] = useState<CustomerTransaction[]>([])
+  const [recent, setRecent] = useState<PortalTransaction[]>([])
   const [recentLoading, setRecentLoading] = useState(true)
   const [recentTotal, setRecentTotal] = useState(0)
 
@@ -297,7 +295,7 @@ export function CustomerPortalHome({ txPath }: Props) {
         <FuelSummaryStrip summary={summary} loading={summaryLoading} />
       </section>
 
-      <section className={`${panel} rounded-2xl p-4 lg:p-5`} aria-label="Recent transactions">
+      <section aria-label="Recent transactions">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h3 className="m-0 text-[1rem] font-extrabold text-ink">Recent Transactions</h3>
           <button
@@ -308,83 +306,7 @@ export function CustomerPortalHome({ txPath }: Props) {
             View all{recentTotal > RECENT_LIMIT ? ` (${recentTotal})` : ''}
           </button>
         </div>
-
-        <ul className="m-0 flex list-none flex-col p-0 lg:hidden">
-          {recent.map((row) => (
-            <li
-              key={row.trid}
-              className="flex items-center justify-between gap-3 border-b border-[#ECEEF2] py-3 last:border-b-0"
-            >
-              <div className="min-w-0">
-                <p className="m-0 text-[0.84rem] font-extrabold text-ink">{row.id}</p>
-                <p className="mt-0.5 mb-0 truncate text-[0.72rem] font-medium text-muted">
-                  {row.when} · {row.product}
-                </p>
-              </div>
-              <div className="shrink-0 text-right">
-                <TypeBadge type={row.type} />
-                <p
-                  className={`mt-1 mb-0 text-[0.8rem] font-extrabold ${
-                    row.type === 'Credit' ? 'text-credit' : 'text-debit'
-                  }`}
-                >
-                  {row.type === 'Credit' ? '+' : '-'}
-                  <PkrValue value={row.amount} amountClass="font-extrabold" />
-                </p>
-              </div>
-            </li>
-          ))}
-          {recentLoading && (
-            <li>
-              <LoadingHint label="Loading transactions…" />
-            </li>
-          )}
-          {!recentLoading && recent.length === 0 && (
-            <li className="py-8 text-center text-sm font-medium text-muted">No records found.</li>
-          )}
-        </ul>
-
-        <div className="hidden overflow-x-auto lg:block">
-          <table className="w-full min-w-[720px] table-fixed border-collapse text-left">
-            <thead>
-              <tr className="border-b border-line text-[0.72rem] font-bold uppercase tracking-[0.04em] text-muted">
-                <th className="px-2 py-2.5 font-bold">ID</th>
-                <th className="px-2 py-2.5 font-bold">Date & Time</th>
-                <th className="px-2 py-2.5 font-bold">Type</th>
-                <th className="px-2 py-2.5 font-bold">Product / Service</th>
-                <th className="px-2 py-2.5 font-bold text-right">Amount</th>
-                <th className="px-2 py-2.5 font-bold text-right">Balance</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recent.map((row) => (
-                <tr key={row.trid} className="border-b border-[#ECEEF2] last:border-b-0">
-                  <Td className="font-bold text-ink">{row.id}</Td>
-                  <Td>
-                    <WhenCell value={row.when} />
-                  </Td>
-                  <Td>
-                    <TypeBadge type={row.type} />
-                  </Td>
-                  <Td className="truncate">{row.product}</Td>
-                  <Td className="text-right">
-                    <span className={row.type === 'Credit' ? 'text-credit' : 'text-debit'}>
-                      {row.type === 'Credit' ? '+' : '-'}
-                      {formatPkrAmount(row.amount)}
-                    </span>
-                  </Td>
-                  <Td className="text-right font-semibold text-ink">
-                    {formatPkrAmount(row.balance)}
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {recentLoading && <LoadingHint label="Loading transactions…" />}
-          {!recentLoading && recent.length === 0 && (
-            <p className="py-8 text-center text-sm font-medium text-muted">No records found.</p>
-          )}
-        </div>
+        <PortalTxTable rows={recent} loading={recentLoading} showOpening={false} />
       </section>
     </div>
   )

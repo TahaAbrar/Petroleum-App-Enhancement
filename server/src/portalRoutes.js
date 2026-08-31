@@ -329,6 +329,30 @@ portalRouter.get('/summary', async (req, res) => {
   }
 })
 
+function formatLedgerDate(value) {
+  if (!value) return ''
+  const d = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  const mon = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const year = d.getUTCFullYear()
+  return `${day}/${mon}/${year}`
+}
+
+function ledgerDescription(value) {
+  return String(value ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .trim()
+}
+
+function ticketNo(mvno) {
+  const s = cleanText(mvno)
+  return s || '0'
+}
+
 portalRouter.get('/transactions', async (req, res) => {
   const accid = requirePortalAccid(req, res)
   if (accid == null) return
@@ -343,10 +367,36 @@ portalRouter.get('/transactions', async (req, res) => {
 
   try {
     const pool = await getPool()
+
+    const metaResult = await pool
+      .request()
+      .input('accid', sql.Int, accid)
+      .input('hasFrom', sql.Bit, dateFrom ? 1 : 0)
+      .input('dateFrom', sql.Date, dateFrom || '1900-01-01')
+      .query(`
+        SELECT
+          A.AccNo,
+          A.AccName,
+          G.GroupName,
+          ISNULL(A.OpBal, 0) + ISNULL((
+            SELECT SUM(ISNULL(L.Debit, 0)) - SUM(ISNULL(L.Credit, 0))
+            FROM dbo.Leger L
+            WHERE L.Accid = A.Accid
+              AND @hasFrom = 1
+              AND CAST(L.Dated AS date) < @dateFrom
+          ), 0) AS OpeningBalance
+        FROM dbo.AccReg A
+        INNER JOIN dbo.GroupReg G ON G.GroupId = A.GroupId
+        WHERE A.Accid = @accid
+      `)
+    const meta = metaResult.recordset[0]
+    if (!meta) {
+      return res.status(404).json({ ok: false, message: 'Customer account not found' })
+    }
+    const openingBalance = money(meta.OpeningBalance)
+
     const filterSql = `
       WHERE 1 = 1
-        AND (@hasFrom = 0 OR CAST(Tx.Dated AS date) >= @dateFrom)
-        AND (@hasTo = 0 OR CAST(Tx.Dated AS date) <= @dateTo)
         AND (
           @kind = N'all'
           OR (@kind = N'credit' AND ISNULL(Tx.Credit, 0) > 0)
@@ -361,6 +411,7 @@ portalRouter.get('/transactions', async (req, res) => {
           L.Timed,
           L.Type,
           L.VNo,
+          L.MVNo,
           L.Debit,
           L.Credit,
           L.Description,
@@ -371,16 +422,18 @@ portalRouter.get('/transactions', async (req, res) => {
           L.RPMG,
           L.HO,
           L.RHO,
-          ISNULL(A.OpBal, 0) + SUM(ISNULL(L.Debit, 0) - ISNULL(L.Credit, 0))
-            OVER (ORDER BY L.Trid ROWS UNBOUNDED PRECEDING) AS RunningBalance
+          @opening + SUM(ISNULL(L.Debit, 0) - ISNULL(L.Credit, 0))
+            OVER (ORDER BY L.Dated, L.Trid ROWS UNBOUNDED PRECEDING) AS RunningBalance
         FROM dbo.Leger L
-        INNER JOIN dbo.AccReg A ON A.Accid = L.Accid
         WHERE L.Accid = @accid
+          AND (@hasFrom = 0 OR CAST(L.Dated AS date) >= @dateFrom)
+          AND (@hasTo = 0 OR CAST(L.Dated AS date) <= @dateTo)
       )
     `
 
     const countReq = pool.request()
     countReq.input('accid', sql.Int, accid)
+    countReq.input('opening', sql.Float, openingBalance)
     countReq.input('kind', sql.NVarChar(10), kind)
     countReq.input('hasFrom', sql.Bit, dateFrom ? 1 : 0)
     countReq.input('hasTo', sql.Bit, dateTo ? 1 : 0)
@@ -396,6 +449,7 @@ portalRouter.get('/transactions', async (req, res) => {
 
     const listReq = pool.request()
     listReq.input('accid', sql.Int, accid)
+    listReq.input('opening', sql.Float, openingBalance)
     listReq.input('kind', sql.NVarChar(10), kind)
     listReq.input('hasFrom', sql.Bit, dateFrom ? 1 : 0)
     listReq.input('hasTo', sql.Bit, dateTo ? 1 : 0)
@@ -412,6 +466,7 @@ portalRouter.get('/transactions', async (req, res) => {
         Tx.Timed,
         Tx.Type,
         Tx.VNo,
+        Tx.MVNo,
         Tx.Debit,
         Tx.Credit,
         Tx.Description,
@@ -428,7 +483,9 @@ portalRouter.get('/transactions', async (req, res) => {
       LEFT JOIN dbo.UserReg U ON U.UserId = Tx.UserId
       ${filterSql}
       ORDER BY
+        CASE WHEN @sort = N'oldest' THEN Tx.Dated END ASC,
         CASE WHEN @sort = N'oldest' THEN Tx.Trid END ASC,
+        CASE WHEN @sort = N'recent' THEN Tx.Dated END DESC,
         CASE WHEN @sort = N'recent' THEN Tx.Trid END DESC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `)
@@ -438,17 +495,31 @@ portalRouter.get('/transactions', async (req, res) => {
       total,
       offset,
       limit,
+      openingBalance,
+      account: {
+        id: cleanText(meta.AccNo) || String(accid),
+        name: cleanText(meta.AccName) || '—',
+        groupName: cleanText(meta.GroupName) || '—',
+      },
       transactions: listResult.recordset.map((row) => {
         const { type, amount } = mapAmount(row, kind)
         const product = productFields(row)
+        const description = ledgerDescription(row.Description) || product.product
         return {
           trid: row.Trid,
           id: txDisplayId(row.Type, row.VNo, row.Trid),
+          date: formatLedgerDate(row.Dated),
           when: formatWhen(row.Dated, row.Timed),
           type,
-          product: product.product,
+          product: description,
+          description,
           quantity: product.quantity,
           rate: product.rate,
+          ticket: ticketNo(row.MVNo),
+          vno: row.VNo != null && row.VNo !== '' ? String(row.VNo) : '0',
+          mvno: ticketNo(row.MVNo),
+          debit: money(row.Debit),
+          credit: money(row.Credit),
           amount,
           balance: money(row.RunningBalance),
           by: cleanText(row.UserName) || cleanText(row.UserType) || '—',
