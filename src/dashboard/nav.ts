@@ -4,9 +4,9 @@ const NAV_BASE: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'grid', path: '/dashboard' },
   { id: 'chartOfAccounts', label: 'Chart of Accounts', icon: 'ledger', path: '/chart-of-accounts' },
   { id: 'customers', label: 'Search Account', icon: 'users', path: '/customers' },
+  { id: 'cashbook', label: 'Cash Book', icon: 'cashbook', path: '/cashbook' },
   { id: 'credit', label: 'Credit', icon: 'credit', path: '/credit' },
   { id: 'debit', label: 'Debit', icon: 'debit', path: '/debit' },
-  { id: 'cashbook', label: 'Cash Book', icon: 'cashbook', path: '/cashbook' },
   { id: 'transactions', label: 'Transactions', icon: 'swap', path: '/transactions' },
   { id: 'reports', label: 'Stock', icon: 'doc', path: '/reports' },
 ]
