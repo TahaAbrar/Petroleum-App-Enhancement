@@ -4,7 +4,7 @@
 - Repo: Petroleum-App-Enhancement (cloned into `/home/hanan/fuel-pro`)
 - Frontend: Vite + React + Tailwind (`npm run dev`) — default Vite port **5173**
 - Backend: Express API in `server/` (`npm run dev:api`) — default **PORT=4000**
-- Vite proxies `/api` → `http://127.0.0.1:4002` (hardcoded in `vite.config.ts`; matches `server/.env` PORT)
+- Vite proxies `/api` → `http://127.0.0.1:4002` (or `VITE_API_PROXY_TARGET`; matches local BE PORT)
 - Dev CORS allows public/LAN Origin (e.g. `http://169.58.29.84:5173`), not only localhost
 - SQL Server expected on **1433** (`DB_PORT` in `server/.env.example`)
 
@@ -161,26 +161,31 @@ Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info
 - **FE:** `src/lib/api.ts` sends Bearer + key; `customers.ts` is live helpers (mock array removed)
 - **Balance:** `ISNULL(OpBal,0) + SUM(Debit) - SUM(Credit)`; history running balance via window on Trid; include Posted + NULL ledger rows
 
-## Reports page (2026-08-28, live)
+## Reports page (2026-08-30, Stock statement)
 
-**Status:** Live SQL via `GET /api/reports/*`. Dummy `reportsData.ts` unused.
+**Status:** Page heading is **Stock statement**. Nav label **Stock** (path still `/reports`). Filters/KPIs removed. Live SQL via `GET /api/reports/stock-statement`.
 
 ### Files
-- `server/src/reportsRoutes.js` — filters, summary, product breakdown, recent tx (SELECT on `Leger` + `AccReg`)
-- `src/dashboard/reports.ts` — FE API helpers
-- `src/dashboard/ReportsPage.tsx` — same UI theme; live KPIs, filters, product table, mobile recent tx
+- `server/src/reportsRoutes.js` — `GET /stock-statement` + `GET /stock-statement/:itemId` ledger
+- `src/dashboard/reports.ts` — `fetchStockStatement` / `fetchStockLedger` + formatters
+- `src/dashboard/ReportsPage.tsx` — list with **Open ›** (COA-style); routes to item ledger
+- `src/dashboard/StockLedgerPage.tsx` — full stock ledger detail (Date, V.No, Description, SX, Rate, Reference, Stock In, Stock Out, Balance)
 
-### Filters (from DB)
-- **Report Type** — `Leger.Type` (Slip, DSales, JV, Purchases, Adjustment, Sales) + All Types
-- **Date Range** — `Leger.Dated` (defaults to min/max in DB)
-- **Customer** — `AccReg` (70 accounts) + All Customers
-- **Product** — PMG, HSD, HO, Cash, Other + All Products (desktop)
+### List columns (from DB)
+- **Item Name** — `ItemId` + `ItemReg.ItemName`
+- **Stock** / **Last Rate** / **Stock Value** — `StockValue` view + `ItemReg.PrRate`
+- **Total box** — sum of Stock Value
+- Row click / Open → `/reports/item/:itemId` (accountant/user prefixes too)
 
-### Data shown
-- KPIs: SUM(Credit), SUM(Debit), Net Flow, COUNT (`Leger`)
-- Product table: **Stock In / Stock Out / Net** from `Stockleger` + `ItemReg`, current stock from `StockValue`; Cash/Other from `Leger`
-- Product filter: all `ItemReg` items + Cash + Other
-- Mobile: top 5 recent ledger rows (filtered)
+### Stock Ledger detail
+- Header: date range (min–max), Item ID, Item Name, Brand (`BrandReg`), Opening Stock `0.00`
+- Rows from `Stockleger` with running Balance; Rate = RateIn (in) or RateOut (out)
+- Bottom boxes: Total Stock In, Total Stock Out, Closing Balance, **Total Stock Value**
+- Back returns to stock statement; sidebar stays on Stock
+
+### Notes
+- Older `/api/reports/filters|summary|products|recent` unused by this page
+- Dummy `reportsData.ts` unused
 
 ## Reports page (2026-08-26)
 - `src/dashboard/ReportsPage.tsx` + `reportsData.ts` — dummy UI
@@ -194,9 +199,9 @@ Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info
 **Status:** Steps 1–3 UI unchanged; live SQL. Step 4 = separate **Account Ledger** page on account click.
 
 ### Navigation (4 levels)
-1. **Charts** — `ChartAcc` via `GET /api/chart-of-accounts/charts`
-2. **Sub Charts** — Sir Idrees query (`GroupReg` + `Leger` by `ChartId`, `BizId`) via `GET /api/chart-of-accounts/charts/:chartId/sub-charts`
-3. **Accounts** — Sir Idrees query (`AccReg` by `GroupId`, `BizId`) via `GET /api/chart-of-accounts/groups/:groupId/accounts`
+1. **Charts** — `ChartAcc` via `GET /api/chart-of-accounts/charts` (counts every `GroupReg` / `AccReg` under the chart, including accounts with no ledger)
+2. **Sub Charts** — all groups for `ChartId`; account count = all `AccReg`; balance from `Leger` + `BizId` (0 if none)
+3. **Accounts** — all `AccReg` in the group (`LEFT JOIN Leger`); ledger-less accounts still listed, balance 0
 4. **Account Ledger** (new page, same shell) — `/chart-of-accounts/account/:accid` (+ accountant/user prefixes). Transactions + fuel summary (HSD/PMG/HO/Advance/Others).
 
 ### Files
@@ -228,6 +233,13 @@ Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info
 ## Agent notes
 - Multiple agents: read this file before work; update after meaningful changes.
 - 2026-08-27: Public login 403 was CORS + proxy port. Vite now proxies to **4001**. Dev CORS allows `--host` public Origin. Both tmux sessions restarted.
+- 2026-08-29: UI: COA ledger top fuel cards removed; Customers Status dropdown removed; Reports Export/Generate + demo dates removed; Tx/Credit/Debit auto-filter, Reset/Filter buttons removed.
+- 2026-08-30: Reports page → **Stock statement**. Removed all filters + KPI cards. Table columns: Item Name, Stock, Last Rate, Stock Value from `ItemReg`/`StockValue`. Total Stock Value box under the last column. Backend `GET /api/reports/stock-statement`. API restarted on :4001.
+- 2026-08-30: Nav **Reports** → **Stock**. Stock row Open › opens **Stock Ledger** (`/reports/item/:itemId`) from `Stockleger` (Date, V.No, Description, SX, Rate, Reference, In, Out, Balance) + bottom total boxes including Total Stock Value.
+- 2026-08-30: **Credit/Debit save research (read-only):** No SQL stored procedures / triggers in DB. Money lives in `dbo.Leger.Debit` / `dbo.Leger.Credit`. Customer fuel/receipts also write `Slip` + `SlipDet`. Simple balanced entries use `Type='JV'` (2 legs, same VNo). Stock qty for duty/purchase uses `Stockleger` (`RefNo` DSales/Purchases/Sales — not Slip). Current API remains SELECT-only.
+- 2026-08-31: **Cash Book UI** — new page `/cashbook` (Admin + Accountant). Fields: Date, Voucher #, Voucher Type (6 options), Debit/Credit Account (AccReg searchable) + Acc Bal boxes, Description, Amount (numbers only). Accounts from `GET /api/cashbook/accounts` (balance from Leger). Save/write not wired yet.
+- 2026-08-31: Cash Book UI polish — removed navy header; FuelLedger theme. Voucher # on right of Voucher Type. Debit/Credit rows: AccNo **Ref** box before account name (type ref ↔ select account). Amount on Description row right.
+- 2026-08-31: Cash Book Ref = AccNo **dropdown** (not text). Customer dropdown shows **name only**; selecting either ref or name keeps both in sync.
 - `knowledge_base/` is the shared coordination folder.
 
 ## Customer portal (2026-08-31)

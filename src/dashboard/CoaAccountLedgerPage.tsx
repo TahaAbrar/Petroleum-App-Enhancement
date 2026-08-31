@@ -192,8 +192,6 @@ export function CoaAccountLedgerPage({ accid, coaPath, homePath }: Props) {
         </span>
       </article>
 
-      <FuelSummaryStrip summary={summary} loading={summaryLoading} />
-
       <section className={`${panel} rounded-2xl p-3.5 lg:p-5`}>
         <div className="mb-3.5 flex flex-col gap-3 lg:mb-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap gap-1.5">

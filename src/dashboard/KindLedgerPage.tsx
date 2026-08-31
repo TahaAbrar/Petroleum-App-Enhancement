@@ -46,7 +46,6 @@ const EMPTY_DRAFT: DraftFilters = {
 
 export function KindLedgerPage({ homePath, kind, title, subtitle, searchQuery = '' }: Props) {
   const [draft, setDraft] = useState<DraftFilters>(EMPTY_DRAFT)
-  const [applied, setApplied] = useState<DraftFilters>(EMPTY_DRAFT)
   const [debouncedQuery, setDebouncedQuery] = useState(searchQuery)
   const [page, setPage] = useState(1)
   const [customers, setCustomers] = useState<TransactionCustomer[]>(
@@ -58,13 +57,13 @@ export function KindLedgerPage({ homePath, kind, title, subtitle, searchQuery = 
   const params: TransactionListParams = useMemo(
     () => ({
       q: debouncedQuery.trim(),
-      accid: applied.accid ? Number(applied.accid) : '',
-      dateFrom: applied.dateFrom,
-      dateTo: applied.dateTo,
+      accid: draft.accid ? Number(draft.accid) : '',
+      dateFrom: draft.dateFrom,
+      dateTo: draft.dateTo,
       kind,
       sort: 'recent',
     }),
-    [applied, debouncedQuery, kind],
+    [draft, debouncedQuery, kind],
   )
 
   const seeded = peekTransactions(params, page)
@@ -193,16 +192,9 @@ export function KindLedgerPage({ homePath, kind, title, subtitle, searchQuery = 
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
   }
 
-  function applyFilters() {
-    setApplied({ ...draft })
-    goToPage(1)
-  }
-
-  function resetFilters() {
-    setDraft(EMPTY_DRAFT)
-    setApplied(EMPTY_DRAFT)
-    goToPage(1)
-  }
+  useEffect(() => {
+    setPage(1)
+  }, [draft.accid, draft.dateFrom, draft.dateTo])
 
   function pageNumbers(): (number | '…')[] {
     if (totalPages <= 7) {
@@ -242,7 +234,7 @@ export function KindLedgerPage({ homePath, kind, title, subtitle, searchQuery = 
         className={`${panel} relative z-30 overflow-visible rounded-2xl p-4 lg:p-5`}
         aria-label="Filters"
       >
-        <div className="grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2 xl:grid-cols-[1.2fr_1.4fr_auto]">
+        <div className="grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2">
           <label className="relative z-10 flex min-w-0 flex-col gap-1.5 overflow-visible">
             <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">Customer</span>
             <SearchableCustomerFilter
@@ -269,24 +261,6 @@ export function KindLedgerPage({ homePath, kind, title, subtitle, searchQuery = 
               }}
             />
           </label>
-
-          <div className="flex items-end gap-2 sm:col-span-2 xl:col-span-1">
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="flex-1 cursor-pointer rounded-xl border border-line bg-white px-4 py-2.5 text-[0.85rem] font-bold text-ink hover:bg-[#f7f8fa] xl:flex-none"
-            >
-              Reset
-            </button>
-            <button
-              type="button"
-              onClick={applyFilters}
-              className="inline-flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border-0 bg-fuel px-4 py-2.5 text-[0.85rem] font-bold text-ink shadow-[0_4px_12px_rgba(245,197,24,0.28)] hover:brightness-95 xl:flex-none"
-            >
-              <FunnelIcon />
-              Filter
-            </button>
-          </div>
         </div>
       </section>
 
@@ -580,19 +554,6 @@ function PagerBtn({
     >
       {children}
     </button>
-  )
-}
-
-function FunnelIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M4 5h16l-6 7.5V18l-4 2v-7.5L4 5Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinejoin="round"
-      />
-    </svg>
   )
 }
 

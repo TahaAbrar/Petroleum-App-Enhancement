@@ -22,8 +22,10 @@ export default function App() {
           <Route path="/customers/:slug" element={<Dashboard />} />
           <Route path="/credit" element={<Dashboard />} />
           <Route path="/debit" element={<Dashboard />} />
+          <Route path="/cashbook" element={<Dashboard />} />
           <Route path="/transactions" element={<Dashboard />} />
           <Route path="/reports" element={<Dashboard />} />
+          <Route path="/reports/item/:itemId" element={<Dashboard />} />
           <Route path="/chart-of-accounts" element={<Dashboard />} />
           <Route path="/chart-of-accounts/account/:accid" element={<Dashboard />} />
         </Route>
@@ -34,8 +36,10 @@ export default function App() {
           <Route path="/accountant/customers/:slug" element={<AccountantDashboard />} />
           <Route path="/accountant/credit" element={<AccountantDashboard />} />
           <Route path="/accountant/debit" element={<AccountantDashboard />} />
+          <Route path="/accountant/cashbook" element={<AccountantDashboard />} />
           <Route path="/accountant/transactions" element={<AccountantDashboard />} />
           <Route path="/accountant/reports" element={<AccountantDashboard />} />
+          <Route path="/accountant/reports/item/:itemId" element={<AccountantDashboard />} />
           <Route path="/accountant/chart-of-accounts" element={<AccountantDashboard />} />
           <Route path="/accountant/chart-of-accounts/account/:accid" element={<AccountantDashboard />} />
         </Route>
@@ -44,6 +48,7 @@ export default function App() {
           <Route path="/user/dashboard" element={<UserDashboard />} />
           <Route path="/user/transactions" element={<UserDashboard />} />
           <Route path="/user/reports" element={<UserDashboard />} />
+          <Route path="/user/reports/item/:itemId" element={<UserDashboard />} />
           <Route path="/user/chart-of-accounts" element={<UserDashboard />} />
           <Route path="/user/chart-of-accounts/account/:accid" element={<UserDashboard />} />
         </Route>

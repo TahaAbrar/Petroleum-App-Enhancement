@@ -3,6 +3,7 @@ export type NavId =
   | 'customers'
   | 'credit'
   | 'debit'
+  | 'cashbook'
   | 'transactions'
   | 'reports'
   | 'chartOfAccounts'
