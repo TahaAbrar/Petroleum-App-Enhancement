@@ -44,6 +44,13 @@ export function NavIcon({ name }: { name: string }) {
           <path d="M12 7.5v5l3 2" />
         </svg>
       )
+    case 'cashbook':
+      return (
+        <svg {...strokeProps}>
+          <rect x="3.5" y="5" width="17" height="14" rx="2" />
+          <path d="M3.5 9h17M8 13h3M8 16h5" />
+        </svg>
+      )
     case 'swap':
       return (
         <svg {...strokeProps}>

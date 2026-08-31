@@ -217,6 +217,190 @@ reportsRouter.get('/filters', async (_req, res) => {
   }
 })
 
+reportsRouter.get('/stock-statement', async (_req, res) => {
+  try {
+    const pool = await getPool()
+    const result = await pool.request().query(`
+      SELECT
+        I.ItemId,
+        I.ItemName,
+        ISNULL(SV.Stock, 0) AS Stock,
+        ISNULL(I.PrRate, 0) AS LastRate,
+        ISNULL(SV.StockValue, 0) AS StockValue
+      FROM dbo.ItemReg I
+      LEFT JOIN dbo.StockValue SV ON SV.ItemId = I.ItemId
+      ORDER BY I.ItemId
+    `)
+
+    const items = result.recordset.map((row) => ({
+      itemId: money(row.ItemId),
+      itemName: cleanText(row.ItemName) || '—',
+      stock: money(row.Stock),
+      lastRate: money(row.LastRate),
+      stockValue: money(row.StockValue),
+    }))
+
+    const totalStockValue = items.reduce((sum, row) => sum + row.stockValue, 0)
+
+    return res.json({
+      ok: true,
+      items,
+      totalStockValue,
+    })
+  } catch (err) {
+    return dbFail(res, err)
+  }
+})
+
+const itemIdParamSchema = z.object({
+  itemId: z.coerce.number().int().positive().max(2_147_483_647),
+})
+
+function formatLedgerDate(dated) {
+  if (!dated) return '—'
+  const d = dated instanceof Date ? dated : new Date(dated)
+  if (Number.isNaN(d.getTime())) return '—'
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  const mon = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const year = d.getUTCFullYear()
+  return `${day}/${mon}/${year}`
+}
+
+function formatIsoDate(dated) {
+  if (!dated) return ''
+  const d = dated instanceof Date ? dated : new Date(dated)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toISOString().slice(0, 10)
+}
+
+reportsRouter.get('/stock-statement/:itemId', async (req, res) => {
+  const parsed = itemIdParamSchema.safeParse(req.params)
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, message: 'Invalid item id' })
+  }
+
+  const { itemId } = parsed.data
+
+  try {
+    const pool = await getPool()
+    const bizId = await resolveBizId(pool)
+
+    const itemResult = await pool
+      .request()
+      .input('itemId', sql.Int, itemId)
+      .query(`
+        SELECT
+          I.ItemId,
+          I.ItemName,
+          ISNULL(B.BrandName, N'') AS BrandName,
+          ISNULL(I.PrRate, 0) AS LastRate,
+          ISNULL(SV.Stock, 0) AS Stock,
+          ISNULL(SV.StockValue, 0) AS StockValue
+        FROM dbo.ItemReg I
+        LEFT JOIN dbo.BrandReg B ON B.BrandId = I.BrandId
+        LEFT JOIN dbo.StockValue SV ON SV.ItemId = I.ItemId
+        WHERE I.ItemId = @itemId
+      `)
+
+    const itemRow = itemResult.recordset[0]
+    if (!itemRow) {
+      return res.status(404).json({ ok: false, message: 'Item not found' })
+    }
+
+    const ledgerResult = await pool
+      .request()
+      .input('itemId', sql.Int, itemId)
+      .input('bizId', sql.Int, bizId)
+      .query(`
+        SELECT
+          SL.Trid,
+          SL.Dated,
+          SL.VNo,
+          SL.Description,
+          SL.SX,
+          SL.QtyIn,
+          SL.QtyOut,
+          SL.RateIn,
+          SL.RateOut,
+          SL.PrValue,
+          SL.RefNo,
+          SUM(ISNULL(SL.QtyIn, 0) - ISNULL(SL.QtyOut, 0)) OVER (
+            ORDER BY SL.Dated, SL.Trid
+            ROWS UNBOUNDED PRECEDING
+          ) AS Balance
+        FROM dbo.Stockleger SL
+        WHERE SL.ItemId = @itemId
+          AND (SL.BizId = @bizId OR SL.BizId IS NULL)
+        ORDER BY SL.Dated, SL.Trid
+      `)
+
+    let totalStockIn = 0
+    let totalStockOut = 0
+    let minDate = ''
+    let maxDate = ''
+
+    const entries = ledgerResult.recordset.map((row) => {
+      const qtyIn = money(row.QtyIn)
+      const qtyOut = money(row.QtyOut)
+      totalStockIn += qtyIn
+      totalStockOut += qtyOut
+
+      const iso = formatIsoDate(row.Dated)
+      if (iso) {
+        if (!minDate || iso < minDate) minDate = iso
+        if (!maxDate || iso > maxDate) maxDate = iso
+      }
+
+      const rate =
+        qtyIn > 0
+          ? money(row.RateIn ?? row.PrValue)
+          : qtyOut > 0
+            ? money(row.RateOut ?? row.PrValue)
+            : money(row.PrValue)
+
+      return {
+        trid: money(row.Trid),
+        date: formatLedgerDate(row.Dated),
+        vno: row.VNo == null || row.VNo === '' ? '' : String(row.VNo),
+        description: cleanText(row.Description) || '—',
+        sx: row.SX == null || row.SX === '' ? null : money(row.SX),
+        rate,
+        reference: cleanText(row.RefNo) || '—',
+        stockIn: qtyIn,
+        stockOut: qtyOut,
+        balance: money(row.Balance),
+      }
+    })
+
+    const closingBalance =
+      entries.length > 0 ? entries[entries.length - 1].balance : money(itemRow.Stock)
+
+    return res.json({
+      ok: true,
+      item: {
+        itemId: money(itemRow.ItemId),
+        itemName: cleanText(itemRow.ItemName) || '—',
+        brandName: cleanText(itemRow.BrandName) || '—',
+        lastRate: money(itemRow.LastRate),
+        stock: money(itemRow.Stock),
+        stockValue: money(itemRow.StockValue),
+      },
+      openingStock: 0,
+      dateFrom: minDate,
+      dateTo: maxDate,
+      entries,
+      totals: {
+        stockIn: totalStockIn,
+        stockOut: totalStockOut,
+        closingBalance,
+        stockValue: money(itemRow.StockValue),
+      },
+    })
+  } catch (err) {
+    return dbFail(res, err)
+  }
+})
+
 reportsRouter.get('/summary', async (req, res) => {
   const parsed = filterQuerySchema.safeParse(req.query)
   if (!parsed.success) {

@@ -13,6 +13,7 @@ import { dashboardRouter } from './dashboardRoutes.js'
 import { companyRouter } from './companyRoutes.js'
 import { coaRouter } from './coaRoutes.js'
 import { reportsRouter } from './reportsRoutes.js'
+import { cashbookRouter } from './cashbookRoutes.js'
 
 const app = express()
 
@@ -130,6 +131,15 @@ app.use(
   requireAuth,
   requireRoles('Administrator', 'Accountant', 'User'),
   reportsRouter,
+)
+
+app.use(
+  '/api/cashbook',
+  transactionLimiter,
+  requireReadKey,
+  requireAuth,
+  requireRoles('Administrator', 'Accountant'),
+  cashbookRouter,
 )
 
 app.all(/^\/api\/.*/, (_req, res) => {

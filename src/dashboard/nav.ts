@@ -6,8 +6,9 @@ const NAV_BASE: NavItem[] = [
   { id: 'customers', label: 'Search Account', icon: 'users', path: '/customers' },
   { id: 'credit', label: 'Credit', icon: 'credit', path: '/credit' },
   { id: 'debit', label: 'Debit', icon: 'debit', path: '/debit' },
+  { id: 'cashbook', label: 'Cash Book', icon: 'cashbook', path: '/cashbook' },
   { id: 'transactions', label: 'Transactions', icon: 'swap', path: '/transactions' },
-  { id: 'reports', label: 'Reports', icon: 'doc', path: '/reports' },
+  { id: 'reports', label: 'Stock', icon: 'doc', path: '/reports' },
 ]
 
 const BOTTOM_BASE = [
@@ -15,7 +16,7 @@ const BOTTOM_BASE = [
   { id: 'customers', label: 'Search Account', path: '/customers', icon: 'users' },
   { id: 'fab', label: 'Add', path: '/credit', icon: 'plus' },
   { id: 'transactions', label: 'Txns', path: '/transactions', icon: 'swap' },
-  { id: 'reports', label: 'Reports', path: '/reports', icon: 'doc' },
+  { id: 'reports', label: 'Stock', path: '/reports', icon: 'doc' },
 ] as const
 
 function withPrefix(path: string, prefix: string) {
@@ -38,6 +39,7 @@ export function buildNav(role: PortalRole): NavItem[] {
               'customers',
               'credit',
               'debit',
+              'cashbook',
               'transactions',
               'reports',
               'chartOfAccounts',
