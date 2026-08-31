@@ -222,14 +222,14 @@ coaRouter.get('/charts/:chartId/sub-charts', async (req, res) => {
       .query(`
         SELECT
           SUM(ISNULL(L.Debit, 0)) - SUM(ISNULL(L.Credit, 0)) AS Balance,
-          A.GroupId,
+          G.GroupId,
           G.GroupName,
           COUNT(DISTINCT A.Accid) AS AccountCount
-        FROM dbo.Leger L
-        INNER JOIN dbo.AccReg A ON L.Accid = A.Accid
-        INNER JOIN dbo.GroupReg G ON A.GroupId = G.GroupId
-        WHERE G.ChartId = @chartId AND L.BizId = @bizId
-        GROUP BY G.ChartId, A.GroupId, G.GroupName
+        FROM dbo.GroupReg G
+        LEFT JOIN dbo.AccReg A ON A.GroupId = G.GroupId
+        LEFT JOIN dbo.Leger L ON L.Accid = A.Accid AND L.BizId = @bizId
+        WHERE G.ChartId = @chartId
+        GROUP BY G.ChartId, G.GroupId, G.GroupName
         ORDER BY G.GroupName
       `)
     return res.json({
@@ -262,7 +262,7 @@ coaRouter.get('/groups/:groupId/accounts', async (req, res) => {
       .query(`
         SELECT
           SUM(ISNULL(L.Debit, 0)) - SUM(ISNULL(L.Credit, 0)) AS Balance,
-          L.Accid,
+          A.Accid,
           A.AccNo,
           A.AccName,
           A.Ph,
@@ -271,13 +271,13 @@ coaRouter.get('/groups/:groupId/accounts', async (req, res) => {
           G.GroupName,
           G.ChartId,
           C.Type AS ChartType
-        FROM dbo.Leger L
-        INNER JOIN dbo.AccReg A ON L.Accid = A.Accid
+        FROM dbo.AccReg A
         INNER JOIN dbo.GroupReg G ON A.GroupId = G.GroupId
         INNER JOIN dbo.ChartAcc C ON G.ChartId = C.ChartId
-        WHERE A.GroupId = @groupId AND L.BizId = @bizId
+        LEFT JOIN dbo.Leger L ON L.Accid = A.Accid AND L.BizId = @bizId
+        WHERE A.GroupId = @groupId
         GROUP BY
-          L.Accid, A.AccNo, A.AccName, A.Ph, A.Urdo, A.Status,
+          A.Accid, A.AccNo, A.AccName, A.Ph, A.Urdo, A.Status,
           G.GroupName, G.ChartId, C.Type
         ORDER BY A.AccName
       `)

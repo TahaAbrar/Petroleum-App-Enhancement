@@ -12,6 +12,7 @@ import { CreditPage } from './CreditPage'
 import { DebitPage } from './DebitPage'
 import { clearPageCache, prefetchDashboardPages } from './pageCache'
 import { ReportsPage } from './ReportsPage'
+import { CashBookPage } from './CashBookPage'
 import { ChartOfAccountsPage } from './ChartOfAccountsPage'
 import {
   FALLBACK_COMPANY,
@@ -46,6 +47,8 @@ export function DashboardShell({ config }: Props) {
   const { nav, bottomNav, homePath, txPath, roleLabel } = config
   const customersNav = nav.find((item) => item.id === 'customers')
   const coaNav = nav.find((item) => item.id === 'chartOfAccounts')
+  const stockNav = nav.find((item) => item.id === 'reports')
+  const stockPath = stockNav?.path ?? '/reports'
   const active =
     nav.find((item) => {
       if (item.id === 'customers') {
@@ -54,6 +57,11 @@ export function DashboardShell({ config }: Props) {
         )
       }
       if (item.id === 'chartOfAccounts') {
+        return (
+          location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
+        )
+      }
+      if (item.id === 'reports') {
         return (
           location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
         )
@@ -417,8 +425,15 @@ export function DashboardShell({ config }: Props) {
             <CreditPage homePath={homePath} txPath={txPath} searchQuery={query} />
           ) : active === 'debit' ? (
             <DebitPage homePath={homePath} txPath={txPath} searchQuery={query} />
+          ) : active === 'cashbook' ? (
+            <CashBookPage homePath={homePath} />
           ) : active === 'reports' ? (
-            <ReportsPage homePath={homePath} txPath={txPath} searchQuery={query} />
+            <ReportsPage
+              homePath={homePath}
+              stockPath={stockPath}
+              txPath={txPath}
+              searchQuery={query}
+            />
           ) : active === 'chartOfAccounts' ? (
             <ChartOfAccountsPage
               homePath={homePath}
@@ -471,7 +486,10 @@ export function DashboardShell({ config }: Props) {
                 : item.id === 'customers' && customersNav
                   ? location.pathname === customersNav.path ||
                     location.pathname.startsWith(`${customersNav.path}/`)
-                  : location.pathname === item.path
+                  : item.id === 'reports'
+                    ? location.pathname === item.path ||
+                      location.pathname.startsWith(`${item.path}/`)
+                    : location.pathname === item.path
 
             return (
               <button

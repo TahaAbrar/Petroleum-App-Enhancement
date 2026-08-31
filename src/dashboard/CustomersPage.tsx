@@ -38,7 +38,6 @@ export function CustomersPage({ searchQuery = '' }: Props) {
     : '/customers'
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [status, setStatus] = useState<CustomerStatus | ''>('')
   const [type, setType] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState(searchQuery)
   const params: CustomerListParams = useMemo(
@@ -46,10 +45,9 @@ export function CustomersPage({ searchQuery = '' }: Props) {
       q: debouncedQuery.trim(),
       dateFrom,
       dateTo,
-      status,
       type,
     }),
-    [debouncedQuery, dateFrom, dateTo, status, type],
+    [debouncedQuery, dateFrom, dateTo, type],
   )
   const seeded = peekCustomerList(params)
   const [fetched, setFetched] = useState<Customer[]>(() => seeded?.customers ?? [])
@@ -236,18 +234,6 @@ export function CustomersPage({ searchQuery = '' }: Props) {
                 setDateFrom(range.from)
                 setDateTo(range.to)
               }}
-            />
-            <MenuFilter
-              icon="status"
-              value={status}
-              placeholder="Status"
-              ariaLabel="Filter by status"
-              onChange={(v) => setStatus(v as CustomerStatus | '')}
-              options={[
-                { value: '', label: 'All statuses' },
-                { value: 'Active', label: 'Active' },
-                { value: 'Inactive', label: 'Inactive' },
-              ]}
             />
             <MenuFilter
               icon="type"
