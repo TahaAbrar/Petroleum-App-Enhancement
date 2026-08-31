@@ -1,4 +1,4 @@
-import { apiGet } from '../lib/api'
+import { apiGet, apiPost } from '../lib/api'
 
 export const VOUCHER_TYPES = [
   'Cash Payment',
@@ -18,6 +18,26 @@ export type CashbookAccount = {
   balance: number
 }
 
+export type CashbookMeta = {
+  nextVNo: number
+  nextDNo: number
+  bizId: number
+  cashInHand: CashbookAccount
+}
+
+export type CashbookEntry = {
+  trid: number
+  vno: string
+  accNo: string
+  accName: string
+  groupName: string
+  mvno: string
+  debit: number
+  credit: number
+  description: string
+  dno: number | null
+}
+
 export function formatCashbookBalance(value: number) {
   return value.toLocaleString('en-US', {
     minimumFractionDigits: 2,
@@ -25,12 +45,12 @@ export function formatCashbookBalance(value: number) {
   })
 }
 
-export function todayIsoDate() {
-  const now = new Date()
-  const y = now.getFullYear()
-  const m = String(now.getMonth() + 1).padStart(2, '0')
-  const d = String(now.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
+export function formatCashbookAmount(value: number) {
+  if (!value) return ''
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 }
 
 /** Allow only digits and at most one decimal point. */
@@ -47,4 +67,41 @@ export async function fetchCashbookAccounts(signal?: AbortSignal) {
     { signal },
   )
   return data.accounts
+}
+
+export async function fetchCashbookMeta(signal?: AbortSignal) {
+  const data = await apiGet<{ ok: true } & CashbookMeta>('/api/cashbook/meta', { signal })
+  return {
+    nextVNo: data.nextVNo,
+    nextDNo: data.nextDNo,
+    bizId: data.bizId,
+    cashInHand: data.cashInHand,
+  }
+}
+
+export async function fetchCashbookEntries(signal?: AbortSignal) {
+  const data = await apiGet<{ ok: true; entries: CashbookEntry[] }>('/api/cashbook/entries', {
+    signal,
+  })
+  return data.entries
+}
+
+export async function saveCashbookEntry(
+  body: {
+    voucherType: VoucherType
+    debitAccid: number
+    creditAccid: number
+    description: string
+    amount: number
+  },
+  signal?: AbortSignal,
+) {
+  return apiPost<{
+    ok: true
+    voucher: { vno: number; dno: number; amount: number }
+    nextVNo: number
+    nextDNo: number
+    cashInHand: CashbookAccount | null
+    entries: CashbookEntry[]
+  }>('/api/cashbook/entries', body, { signal })
 }

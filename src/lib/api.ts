@@ -33,3 +33,32 @@ export async function apiGet<T>(path: string, init?: { signal?: AbortSignal }): 
   }
   return data as T
 }
+
+export async function apiPost<T>(
+  path: string,
+  body: unknown,
+  init?: { signal?: AbortSignal },
+): Promise<T> {
+  const session = getSession()
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    'X-FuelLedger-Key': READ_KEY,
+  }
+  if (session?.token) {
+    headers.Authorization = `Bearer ${session.token}`
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers,
+    body: JSON.stringify(body ?? {}),
+    signal: init?.signal,
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || data.ok === false) {
+    throw new ApiError(data.message || 'Request failed', res.status)
+  }
+  return data as T
+}
