@@ -93,6 +93,8 @@ export async function saveCashbookEntry(
     creditAccid: number
     description: string
     amount: number
+    /** Optional manual number → Leger.MVNo (VNo always auto on server) */
+    mvno?: string
   },
   signal?: AbortSignal,
 ) {

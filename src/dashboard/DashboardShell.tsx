@@ -187,7 +187,7 @@ export function DashboardShell({ config }: Props) {
       {sidebarOpen && (
         <button
           type="button"
-          className="fixed inset-0 z-[25] border-0 bg-ink/35 lg:hidden"
+          className="fixed inset-0 z-[45] border-0 bg-ink/35 lg:hidden"
           aria-label="Close menu"
           onClick={() => {
             setSidebarOpen(false)
@@ -197,7 +197,7 @@ export function DashboardShell({ config }: Props) {
       )}
 
       <aside
-        className={`fixed top-0 left-0 z-30 flex h-dvh w-[min(280px,86vw)] flex-col gap-4 border-r border-line bg-white p-4 pt-5 pb-[calc(5.75rem+env(safe-area-inset-bottom))] transition-transform duration-300 lg:sticky lg:w-auto lg:translate-x-0 lg:overflow-visible lg:pb-4 ${
+        className={`fixed top-0 left-0 z-50 flex h-dvh w-[min(280px,86vw)] flex-col gap-4 border-r border-line bg-white p-4 pt-5 pb-[calc(5.75rem+env(safe-area-inset-bottom))] transition-transform duration-300 lg:sticky lg:z-auto lg:w-auto lg:translate-x-0 lg:overflow-visible lg:pb-4 ${
           sidebarOpen
             ? 'translate-x-0 overflow-visible shadow-[12px_0_40px_rgba(0,0,0,0.12)]'
             : '-translate-x-[105%] overflow-hidden lg:translate-x-0 lg:overflow-visible'

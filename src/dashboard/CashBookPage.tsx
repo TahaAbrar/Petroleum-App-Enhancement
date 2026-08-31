@@ -36,6 +36,7 @@ export function CashBookPage({ homePath }: Props) {
   const [saving, setSaving] = useState(false)
 
   const [voucherNo, setVoucherNo] = useState('')
+  const [mvno, setMvno] = useState('')
   const [voucherType, setVoucherType] = useState<VoucherType | ''>('')
   const [debitAccid, setDebitAccid] = useState('')
   const [creditAccid, setCreditAccid] = useState('')
@@ -73,8 +74,28 @@ export function CashBookPage({ homePath }: Props) {
     return () => ac.abort()
   }, [])
 
+  function applyTypeLocks(type: VoucherType | '', cash: CashbookAccount | null) {
+    setDebitAccid('')
+    setCreditAccid('')
+    setDebitRef('')
+    setCreditRef('')
+    if (!cash) return
+    if (type === 'Cash Payment') {
+      setCreditAccid(String(cash.accid))
+      setCreditRef(cash.accNo || '')
+    } else if (type === 'Cash Received') {
+      setDebitAccid(String(cash.accid))
+      setDebitRef(cash.accNo || '')
+    }
+  }
+
+  function onVoucherTypeChange(next: VoucherType | '') {
+    setVoucherType(next)
+    applyTypeLocks(next, cashInHand)
+  }
+
   useEffect(() => {
-    if (!cashInHand) return
+    if (!cashInHand || !voucherType) return
     if (voucherType === 'Cash Payment') {
       setCreditAccid(String(cashInHand.accid))
       setCreditRef(cashInHand.accNo || '')
@@ -82,7 +103,7 @@ export function CashBookPage({ homePath }: Props) {
       setDebitAccid(String(cashInHand.accid))
       setDebitRef(cashInHand.accNo || '')
     }
-  }, [voucherType, cashInHand])
+  }, [cashInHand])
 
   const debitAccount = useMemo(
     () => accounts.find((a) => String(a.accid) === debitAccid) ?? null,
@@ -145,6 +166,7 @@ export function CashBookPage({ homePath }: Props) {
 
   function resetPartyFields(keepType: boolean) {
     if (!keepType) setVoucherType('')
+    setMvno('')
     setDebitAccid('')
     setCreditAccid('')
     setDebitRef('')
@@ -190,6 +212,9 @@ export function CashBookPage({ homePath }: Props) {
       return
     }
 
+    // Untouched field → mvno state ''; edited → store typed value in MVNo
+    const finalMvno = mvno.trim()
+
     setSaving(true)
     try {
       const result = await saveCashbookEntry({
@@ -198,11 +223,11 @@ export function CashBookPage({ homePath }: Props) {
         creditAccid: Number(creditAccid),
         description: desc,
         amount: amt,
+        mvno: finalMvno,
       })
       setEntries(result.entries)
       setVoucherNo(String(result.nextVNo))
       if (result.cashInHand) setCashInHand(result.cashInHand)
-      // refresh account balances
       const refreshed = await fetchCashbookAccounts()
       setAccounts(refreshed)
       resetPartyFields(true)
@@ -220,6 +245,7 @@ export function CashBookPage({ homePath }: Props) {
     if (creditAboveDebit) {
       return [
         'voucherType',
+        'mvno',
         ...(creditLocked ? [] : ['creditRef', 'creditAccount']),
         ...(debitLocked ? [] : ['debitRef', 'debitAccount']),
         'description',
@@ -228,6 +254,7 @@ export function CashBookPage({ homePath }: Props) {
     }
     return [
       'voucherType',
+      'mvno',
       ...(debitLocked ? [] : ['debitRef', 'debitAccount']),
       ...(creditLocked ? [] : ['creditRef', 'creditAccount']),
       'description',
@@ -387,7 +414,7 @@ export function CashBookPage({ homePath }: Props) {
                     ariaLabel="Voucher type"
                     fieldId="voucherType"
                     options={VOUCHER_TYPES.map((t) => ({ value: t, label: t }))}
-                    onChange={(next) => setVoucherType(next as VoucherType | '')}
+                    onChange={(next) => onVoucherTypeChange(next as VoucherType | '')}
                     onEnterNext={() => focusNextFrom('voucherType')}
                   />
                 </div>
@@ -397,11 +424,14 @@ export function CashBookPage({ homePath }: Props) {
                   </span>
                   <input
                     type="text"
-                    value={voucherNo}
-                    readOnly
-                    tabIndex={-1}
-                    aria-readonly="true"
+                    data-cb-field="mvno"
+                    value={mvno || voucherNo}
+                    onChange={(e) => setMvno(e.target.value)}
+                    placeholder={voucherNo || 'Auto'}
+                    title="Auto VNo always saved. Edit here to also store MVNo."
                     className={`${inputBase} w-[7.5rem] text-right`}
+                    maxLength={50}
+                    autoComplete="off"
                   />
                 </label>
               </div>

@@ -19,7 +19,7 @@ const CUSTOMER_NAV: NavItem[] = [
 const BOTTOM_BASE = [
   { id: 'home', label: 'Home', path: '/dashboard', icon: 'home' },
   { id: 'customers', label: 'Search Account', path: '/customers', icon: 'users' },
-  { id: 'fab', label: 'Add', path: '/credit', icon: 'plus' },
+  { id: 'fab', label: 'Add', path: '/cashbook', icon: 'plus' },
   { id: 'transactions', label: 'Txns', path: '/transactions', icon: 'swap' },
   { id: 'reports', label: 'Stock', path: '/reports', icon: 'doc' },
 ] as const
