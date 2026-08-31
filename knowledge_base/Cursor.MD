@@ -194,6 +194,26 @@ Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info
 - Charts removed: Credit vs Debit, Daily Net Flow
 - Wired in `DashboardShell` when `active === 'reports'`; bottom nav **Reports**
 
+## Cash Book (2026-08-31, live write)
+
+**Status:** Full entry + save. Route `/cashbook` (+ accountant). Nav **Cash Book**.
+
+### Files
+- `server/src/cashbookRoutes.js` — accounts, meta (VNo/DNo/Cash In Hand), WEB entries list, POST dual INSERT
+- `src/dashboard/cashbook.ts` — FE helpers + `saveCashbookEntry`
+- `src/dashboard/CashBookPage.tsx` — form + WEB table
+- `src/lib/api.ts` — `apiPost`
+
+### Save rules
+- Dated/Timed = server now (no date picker)
+- VNo read-only: `COUNT(VNo)/2+1 WHERE RefNo='WEB'`
+- DNo: `ISNULL(MAX(DNo),0)+1 WHERE BizId=@bizId`
+- Two `Leger` rows: Debit leg + Credit leg; `Type='JV'`, `RefNo='WEB'`
+- Description: `{text} From {other account name}`
+- Bal: debit side `balance+amount`, credit side `balance-amount`
+- Cash Payment → credit locked Cash In Hand; Cash Received → debit locked Cash In Hand + credit row above debit
+- **Enter key:** moves to next form field; on Amount → same `handleSave()` as Save button (locked fields skipped in order)
+
 ## Chart of Accounts (2026-08-28, live)
 
 **Status:** Steps 1–3 UI unchanged; live SQL. Step 4 = separate **Account Ledger** page on account click.
@@ -237,9 +257,8 @@ Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info
 - 2026-08-30: Reports page → **Stock statement**. Removed all filters + KPI cards. Table columns: Item Name, Stock, Last Rate, Stock Value from `ItemReg`/`StockValue`. Total Stock Value box under the last column. Backend `GET /api/reports/stock-statement`. API restarted on :4001.
 - 2026-08-30: Nav **Reports** → **Stock**. Stock row Open › opens **Stock Ledger** (`/reports/item/:itemId`) from `Stockleger` (Date, V.No, Description, SX, Rate, Reference, In, Out, Balance) + bottom total boxes including Total Stock Value.
 - 2026-08-30: **Credit/Debit save research (read-only):** No SQL stored procedures / triggers in DB. Money lives in `dbo.Leger.Debit` / `dbo.Leger.Credit`. Customer fuel/receipts also write `Slip` + `SlipDet`. Simple balanced entries use `Type='JV'` (2 legs, same VNo). Stock qty for duty/purchase uses `Stockleger` (`RefNo` DSales/Purchases/Sales — not Slip). Current API remains SELECT-only.
-- 2026-08-31: **Cash Book UI** — new page `/cashbook` (Admin + Accountant). Fields: Date, Voucher #, Voucher Type (6 options), Debit/Credit Account (AccReg searchable) + Acc Bal boxes, Description, Amount (numbers only). Accounts from `GET /api/cashbook/accounts` (balance from Leger). Save/write not wired yet.
-- 2026-08-31: Cash Book UI polish — removed navy header; FuelLedger theme. Voucher # on right of Voucher Type. Debit/Credit rows: AccNo **Ref** box before account name (type ref ↔ select account). Amount on Description row right.
-- 2026-08-31: Cash Book Ref = AccNo **dropdown** (not text). Customer dropdown shows **name only**; selecting either ref or name keeps both in sync.
+- 2026-08-31: **Cash Book** (`/cashbook`, Admin+Accountant). FuelLedger theme. AccNo Ref dropdown + name-only account dropdowns; Acc Bal boxes. **Save live:** auto Dated/Timed; VNo from `COUNT(VNo)/2+1 WHERE RefNo='WEB'` (read-only); DNo `MAX+1`; dual parameterized `Leger` INSERT (`Type=JV`, `RefNo=WEB`); Cash Payment locks credit=Cash In Hand (Accid 1); Cash Received locks debit=Cash In Hand and shows Credit row above Debit; other types both editable. Bottom table = WEB entries only. APIs: `GET /accounts|/meta|/entries`, `POST /entries`. `apiPost` in `lib/api.ts`.
+- 2026-08-31: Cash Book **Enter** = next field; Enter on Amount = save (same validation as Save btn).
 - `knowledge_base/` is the shared coordination folder.
 
 ## Frontend `src/` architecture (2026-08-26 exploration)
