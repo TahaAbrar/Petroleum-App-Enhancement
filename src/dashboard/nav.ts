@@ -4,11 +4,16 @@ const NAV_BASE: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'grid', path: '/dashboard' },
   { id: 'chartOfAccounts', label: 'Chart of Accounts', icon: 'ledger', path: '/chart-of-accounts' },
   { id: 'customers', label: 'Search Account', icon: 'users', path: '/customers' },
+  { id: 'cashbook', label: 'Cash Book', icon: 'cashbook', path: '/cashbook' },
   { id: 'credit', label: 'Credit', icon: 'credit', path: '/credit' },
   { id: 'debit', label: 'Debit', icon: 'debit', path: '/debit' },
-  { id: 'cashbook', label: 'Cash Book', icon: 'cashbook', path: '/cashbook' },
   { id: 'transactions', label: 'Transactions', icon: 'swap', path: '/transactions' },
   { id: 'reports', label: 'Stock', icon: 'doc', path: '/reports' },
+]
+
+const CUSTOMER_NAV: NavItem[] = [
+  { id: 'dashboard', label: 'My Account', icon: 'grid', path: '/customer/dashboard' },
+  { id: 'transactions', label: 'My Transactions', icon: 'swap', path: '/customer/transactions' },
 ]
 
 const BOTTOM_BASE = [
@@ -19,6 +24,11 @@ const BOTTOM_BASE = [
   { id: 'reports', label: 'Stock', path: '/reports', icon: 'doc' },
 ] as const
 
+const CUSTOMER_BOTTOM: BottomNavItem[] = [
+  { id: 'home', label: 'Home', path: '/customer/dashboard', icon: 'home' },
+  { id: 'transactions', label: 'Txns', path: '/customer/transactions', icon: 'swap' },
+]
+
 function withPrefix(path: string, prefix: string) {
   if (!prefix) return path
   if (path === '/dashboard') return `${prefix}/dashboard`
@@ -26,6 +36,8 @@ function withPrefix(path: string, prefix: string) {
 }
 
 export function buildNav(role: PortalRole): NavItem[] {
+  if (role === 'Customer') return CUSTOMER_NAV
+
   const prefix =
     role === 'Accountant' ? '/accountant' : role === 'User' ? '/user' : ''
 
@@ -56,6 +68,8 @@ export function buildNav(role: PortalRole): NavItem[] {
 }
 
 export function buildBottomNav(role: PortalRole): BottomNavItem[] {
+  if (role === 'Customer') return CUSTOMER_BOTTOM
+
   const prefix =
     role === 'Accountant' ? '/accountant' : role === 'User' ? '/user' : ''
 
@@ -80,6 +94,7 @@ export function adminConfig() {
     bottomNav: buildBottomNav('Administrator'),
     homePath: '/dashboard',
     txPath: '/transactions',
+    kind: 'staff' as const,
   }
 }
 
@@ -92,6 +107,7 @@ export function accountantConfig() {
     bottomNav: buildBottomNav('Accountant'),
     homePath: '/accountant/dashboard',
     txPath: '/accountant/transactions',
+    kind: 'staff' as const,
   }
 }
 
@@ -104,5 +120,19 @@ export function userConfig() {
     bottomNav: buildBottomNav('User'),
     homePath: '/user/dashboard',
     txPath: '/user/transactions',
+    kind: 'staff' as const,
+  }
+}
+
+export function customerConfig() {
+  const nav = buildNav('Customer')
+  return {
+    portalTitle: 'Customer Portal',
+    roleLabel: 'Customer',
+    nav,
+    bottomNav: buildBottomNav('Customer'),
+    homePath: '/customer/dashboard',
+    txPath: '/customer/transactions',
+    kind: 'customer' as const,
   }
 }

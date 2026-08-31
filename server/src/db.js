@@ -53,3 +53,28 @@ export async function findUserByUsername(username) {
 
   return result.recordset[0] || null
 }
+
+/**
+ * Customer portal login — AccReg.WebUser / WebPass (SELECT only).
+ * Never returns Pic.
+ */
+export async function findCustomerByWebUser(username) {
+  const pool = await getPool()
+  const request = pool.request()
+  request.input('username', sql.NVarChar(30), username)
+
+  const result = await request.query(`
+    SELECT TOP (1)
+      Accid,
+      AccNo,
+      AccName,
+      WebUser,
+      WebPass,
+      WebStatus,
+      Status
+    FROM dbo.AccReg
+    WHERE LTRIM(RTRIM(WebUser)) = @username
+  `)
+
+  return result.recordset[0] || null
+}

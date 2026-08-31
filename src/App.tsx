@@ -5,6 +5,7 @@ import LoginPage from './pages/LoginPage'
 import Dashboard from './pages/Dashboard'
 import AccountantDashboard from './pages/AccountantDashboard'
 import UserDashboard from './pages/UserDashboard'
+import CustomerDashboard from './pages/CustomerDashboard'
 
 export default function App() {
   return (
@@ -50,6 +51,11 @@ export default function App() {
           <Route path="/user/reports/item/:itemId" element={<UserDashboard />} />
           <Route path="/user/chart-of-accounts" element={<UserDashboard />} />
           <Route path="/user/chart-of-accounts/account/:accid" element={<UserDashboard />} />
+        </Route>
+
+        <Route element={<RoleRoute allow={['Customer']} />}>
+          <Route path="/customer/dashboard" element={<CustomerDashboard />} />
+          <Route path="/customer/transactions" element={<CustomerDashboard />} />
         </Route>
 
         <Route element={<ProtectedRoute />}>

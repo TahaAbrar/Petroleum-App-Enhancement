@@ -25,4 +25,5 @@ server/.env
 *.sln
 *.sw?
 
-.env
+# Agent shared notes (local only)
+knowledge_base/Cursor.MD

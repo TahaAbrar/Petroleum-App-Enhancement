@@ -61,6 +61,7 @@ export function normalizeRole(type) {
   const t = String(type || '').trim().toLowerCase()
   if (t === 'administrator' || t === 'admin') return 'Administrator'
   if (t === 'accountant') return 'Accountant'
+  if (t === 'customer') return 'Customer'
   if (t === 'user') return 'User'
   return 'User'
 }
@@ -71,6 +72,8 @@ export function dashboardPathForRole(role) {
       return '/dashboard'
     case 'Accountant':
       return '/accountant/dashboard'
+    case 'Customer':
+      return '/customer/dashboard'
     case 'User':
       return '/user/dashboard'
     default:

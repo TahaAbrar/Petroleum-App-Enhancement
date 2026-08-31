@@ -14,6 +14,8 @@ import { clearPageCache, prefetchDashboardPages } from './pageCache'
 import { ReportsPage } from './ReportsPage'
 import { CashBookPage } from './CashBookPage'
 import { ChartOfAccountsPage } from './ChartOfAccountsPage'
+import { CustomerPortalHome } from './CustomerPortalHome'
+import { CustomerPortalTransactions } from './CustomerPortalTransactions'
 import {
   FALLBACK_COMPANY,
   loadCompany,
@@ -44,7 +46,7 @@ export function DashboardShell({ config }: Props) {
   const companyBrandRef = useRef<HTMLDivElement>(null)
   const desktopHoverTimer = useRef<number | null>(null)
 
-  const { nav, bottomNav, homePath, txPath, roleLabel } = config
+  const { nav, bottomNav, homePath, txPath, roleLabel, kind } = config
   const customersNav = nav.find((item) => item.id === 'customers')
   const coaNav = nav.find((item) => item.id === 'chartOfAccounts')
   const stockNav = nav.find((item) => item.id === 'reports')
@@ -70,10 +72,12 @@ export function DashboardShell({ config }: Props) {
     })?.id ?? 'dashboard'
   const activeLabel = nav.find((n) => n.id === active)?.label || 'Dashboard'
   const activePath = nav.find((n) => n.id === active)?.path || homePath
-  const displayName = session?.user?.username || 'User'
+  const displayName =
+    session?.user?.name || session?.user?.username || (kind === 'customer' ? 'Customer' : 'User')
   const initial = displayName.charAt(0).toUpperCase()
   const showSection = active !== 'dashboard'
   const isCustomers = active === 'customers'
+  const isCustomerPortal = kind === 'customer'
   const shortAddress = truncateAddress(company.address)
 
   useEffect(() => {
@@ -129,9 +133,9 @@ export function DashboardShell({ config }: Props) {
   }, [location.pathname])
 
   useEffect(() => {
-    if (active !== 'dashboard') return
+    if (active !== 'dashboard' || isCustomerPortal) return
     prefetchDashboardPages()
-  }, [active])
+  }, [active, isCustomerPortal])
 
   useEffect(() => {
     if (!logoutConfirmOpen) return
@@ -347,25 +351,6 @@ export function DashboardShell({ config }: Props) {
             />
           </label>
           <div className="flex items-center justify-end gap-3">
-            <button
-              type="button"
-              className="relative grid size-[42px] place-items-center rounded-full border-0 bg-white text-ink shadow-card"
-              aria-label="Notifications"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path
-                  d="M6 9.5a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 13.5 6 9.5Z"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                  strokeLinejoin="round"
-                />
-                <path d="M10 18.5a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.7" />
-              </svg>
-              <span className="absolute top-1 right-1 grid h-4 min-w-4 place-items-center rounded-full border-2 border-surface bg-fuel px-1 text-[0.62rem] font-extrabold text-ink">
-                3
-              </span>
-            </button>
-
             <div
               ref={desktopMenuRef}
               className="relative"
@@ -417,7 +402,11 @@ export function DashboardShell({ config }: Props) {
         </header>
 
         <div className="flex flex-col gap-3.5 px-4 pb-4 pt-1 lg:gap-[1.15rem] lg:px-6 lg:pb-8 lg:pt-2">
-          {active === 'customers' ? (
+          {isCustomerPortal && active === 'dashboard' ? (
+            <CustomerPortalHome txPath={txPath} />
+          ) : isCustomerPortal && active === 'transactions' ? (
+            <CustomerPortalTransactions homePath={homePath} />
+          ) : active === 'customers' ? (
             <CustomersPage searchQuery={query} txPath={txPath} />
           ) : active === 'transactions' ? (
             <TransactionsPage homePath={homePath} searchQuery={query} />
