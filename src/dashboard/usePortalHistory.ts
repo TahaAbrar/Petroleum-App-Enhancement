@@ -1,25 +1,49 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from '../toast'
-import type { CustomerTransaction, HistoryKind, HistorySort } from './customers'
-import type { CustomerHistoryState } from './customerDetails/useCustomerHistory'
-import { fetchPortalTransactions } from './portal'
+import type { HistoryKind, HistorySort } from './customers'
+import {
+  fetchPortalTransactions,
+  type PortalAccountMeta,
+  type PortalTransaction,
+} from './portal'
 
-const PAGE = 15
-const PREFETCH = 50
+const PAGE = 20
+const PREFETCH = 60
+
+export type PortalHistoryState = {
+  rows: PortalTransaction[]
+  total: number
+  openingBalance: number
+  totalDebit: number
+  totalCredit: number
+  account: PortalAccountMeta | null
+  loading: boolean
+  loadingMore: boolean
+  hasMore: boolean
+  emptyRange: boolean
+  revealMore: () => void
+  prefetch: () => void
+}
+
+const EMPTY_ACCOUNT: PortalAccountMeta = { id: '—', name: '—', groupName: '—' }
 
 export function usePortalHistory(
   kind: HistoryKind,
   dateFrom: string,
   dateTo: string,
   sort: HistorySort,
-): CustomerHistoryState {
-  const [fetched, setFetched] = useState<CustomerTransaction[]>([])
+): PortalHistoryState {
+  const [fetched, setFetched] = useState<PortalTransaction[]>([])
   const [total, setTotal] = useState(0)
+  const [openingBalance, setOpeningBalance] = useState(0)
+  const [totalDebit, setTotalDebit] = useState(0)
+  const [totalCredit, setTotalCredit] = useState(0)
+  const [account, setAccount] = useState<PortalAccountMeta | null>(null)
   const [visible, setVisible] = useState(PAGE)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const inflight = useRef(false)
-  const fetchedRef = useRef<CustomerTransaction[]>([])
+  const fetchedRef = useRef<PortalTransaction[]>([])
   const totalRef = useRef(0)
   const gen = useRef(0)
 
@@ -53,12 +77,17 @@ export function usePortalHistory(
         if (id !== gen.current) return
         setFetched(data.transactions)
         setTotal(data.total)
+        setOpeningBalance(data.openingBalance)
+        setTotalDebit(data.totalDebit)
+        setTotalCredit(data.totalCredit)
+        setAccount(data.account)
         setVisible(Math.min(PAGE, data.total))
       })
       .catch((err) => {
         if (ac.signal.aborted || id !== gen.current) return
         setFetched([])
         setTotal(0)
+        setAccount(null)
         toast.error(err instanceof Error ? err.message : 'Could not load transactions')
       })
       .finally(() => {
@@ -90,6 +119,10 @@ export function usePortalHistory(
           limit: Math.min(limit, 50),
         })
         setTotal(data.total)
+        setOpeningBalance(data.openingBalance)
+        setTotalDebit(data.totalDebit)
+        setTotalCredit(data.totalCredit)
+        setAccount(data.account)
         setFetched((prev) => {
           const seen = new Set(prev.map((row) => row.trid))
           return [...prev, ...data.transactions.filter((row) => !seen.has(row.trid))]
@@ -126,6 +159,10 @@ export function usePortalHistory(
   return {
     rows: fetched.slice(0, Math.min(visible, fetched.length)),
     total,
+    openingBalance,
+    totalDebit,
+    totalCredit,
+    account: account ?? (loading ? null : EMPTY_ACCOUNT),
     loading,
     loadingMore,
     hasMore: visible < total,

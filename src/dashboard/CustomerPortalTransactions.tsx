@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { HistoryKind, HistorySort } from './customers'
-import { CustomerHistoryPanel } from './customerDetails/HistoryPanel'
+import type { HistorySort } from './customers'
 import { BackChevron } from './customerDetails/ui'
+import { applyDateRange, DateRangeFilter } from './filters'
+import { panel } from './styles'
+import { PortalTxTable } from './PortalTxTable'
 import { usePortalHistory } from './usePortalHistory'
 
 type Props = {
@@ -11,22 +13,41 @@ type Props = {
 
 export function CustomerPortalTransactions({ homePath }: Props) {
   const navigate = useNavigate()
-  const [tab, setTab] = useState<HistoryKind>('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [sort, setSort] = useState<HistorySort>('recent')
-  const history = usePortalHistory(tab, dateFrom, dateTo, sort)
+  const [sort] = useState<HistorySort>('oldest')
+  const history = usePortalHistory('all', dateFrom, dateTo, sort)
 
-  function handleTab(next: HistoryKind) {
-    if (next === tab) return
-    setDateFrom('')
-    setDateTo('')
-    setTab(next)
-  }
+  const afterFiveMobileRef = useRef<HTMLLIElement | null>(null)
+  const afterFiveDesktopRef = useRef<HTMLTableRowElement | null>(null)
+  const mobileSentinelRef = useRef<HTMLDivElement | null>(null)
+  const desktopSentinelRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const observers: IntersectionObserver[] = []
+    const watch = (target: Element | null) => {
+      if (!target) return
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((e) => e.isIntersecting)) history.revealMore()
+        },
+        { root: null, rootMargin: '160px 0px', threshold: 0.01 },
+      )
+      observer.observe(target)
+      observers.push(observer)
+    }
+    watch(afterFiveMobileRef.current)
+    watch(afterFiveDesktopRef.current)
+    watch(mobileSentinelRef.current)
+    watch(desktopSentinelRef.current)
+    return () => observers.forEach((o) => o.disconnect())
+  }, [history.revealMore, history.hasMore, history.rows.length])
 
   const emptyMessage = history.emptyRange
     ? 'No transactions in this date range'
     : 'No records found.'
+
+  const account = history.account
 
   return (
     <div className="flex flex-col gap-3.5 lg:gap-4">
@@ -40,7 +61,7 @@ export function CustomerPortalTransactions({ homePath }: Props) {
           Back
         </button>
         <h1 className="m-0 flex-1 pr-12 text-center text-[1.1rem] font-extrabold tracking-[-0.02em] text-ink">
-          My Transactions
+          Account Ledger
         </h1>
       </div>
 
@@ -55,10 +76,10 @@ export function CustomerPortalTransactions({ homePath }: Props) {
               My Account
             </button>
             <span className="mx-1.5 text-[#c4c9d2]">›</span>
-            <span className="font-semibold text-ink">My Transactions</span>
+            <span className="font-semibold text-ink">Account Ledger</span>
           </p>
           <h1 className="mt-1 mb-0 text-[1.45rem] font-extrabold tracking-[-0.03em] text-ink">
-            My Transactions
+            Account Ledger
           </h1>
         </div>
         <button
@@ -71,17 +92,53 @@ export function CustomerPortalTransactions({ homePath }: Props) {
         </button>
       </div>
 
-      <CustomerHistoryPanel
-        history={history}
-        tab={tab}
-        sort={sort}
-        dateFrom={dateFrom}
-        dateTo={dateTo}
+      <section className={`${panel} rounded-2xl p-4 lg:px-5 lg:py-4`} aria-label="Account header">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="m-0 text-[0.75rem] font-semibold uppercase tracking-[0.04em] text-muted">
+              Account Name
+            </p>
+            <p className="mt-1 mb-0 text-[1.05rem] font-extrabold text-ink">
+              {account ? `${account.id} ${account.name}` : 'Loading…'}
+            </p>
+            <p className="mt-1 mb-0 text-[0.84rem] font-medium text-muted">
+              Group: {account?.groupName || '—'}
+            </p>
+          </div>
+          <DateRangeFilter
+            variant="pill"
+            grouped
+            from={dateFrom}
+            to={dateTo}
+            onFromChange={(next) => {
+              const range = applyDateRange('from', next, dateFrom, dateTo)
+              setDateFrom(range.from)
+              setDateTo(range.to)
+            }}
+            onToChange={(next) => {
+              const range = applyDateRange('to', next, dateFrom, dateTo)
+              setDateFrom(range.from)
+              setDateTo(range.to)
+            }}
+          />
+        </div>
+      </section>
+
+      <PortalTxTable
+        rows={history.rows}
+        openingBalance={history.openingBalance}
+        totalDebit={history.totalDebit}
+        totalCredit={history.totalCredit}
+        showOpening
+        showTotals
+        loading={history.loading}
+        loadingMore={history.loadingMore}
         emptyMessage={emptyMessage}
-        onTab={handleTab}
-        onSort={setSort}
-        onDateFrom={setDateFrom}
-        onDateTo={setDateTo}
+        afterFiveMobileRef={afterFiveMobileRef}
+        afterFiveDesktopRef={afterFiveDesktopRef}
+        mobileSentinelRef={mobileSentinelRef}
+        desktopSentinelRef={desktopSentinelRef}
+        onPrefetch={history.prefetch}
       />
     </div>
   )
