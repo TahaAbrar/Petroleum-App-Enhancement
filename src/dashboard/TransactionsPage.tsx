@@ -55,7 +55,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
 
   const [draft, setDraft] = useState<DraftFilters>(EMPTY_DRAFT)
   const [debouncedQuery, setDebouncedQuery] = useState(searchQuery)
-  const [sort, setSort] = useState<TxSort>('recent')
+  const [sort] = useState<TxSort>('recent')
   const [page, setPage] = useState(1)
   const [customers, setCustomers] = useState<TransactionCustomer[]>(
     () => peekTransactionCustomers() ?? [],

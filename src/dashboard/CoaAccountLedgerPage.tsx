@@ -214,8 +214,16 @@ export function CoaAccountLedgerPage({ accid, coaPath, homePath }: Props) {
             <DateRangeFilter
               from={dateFrom}
               to={dateTo}
-              onFrom={(v) => applyDateRange(v, dateTo, setDateFrom, setDateTo)}
-              onTo={(v) => applyDateRange(dateFrom, v, setDateFrom, setDateTo)}
+              onFromChange={(next) => {
+                const range = applyDateRange('from', next, dateFrom, dateTo)
+                setDateFrom(range.from)
+                setDateTo(range.to)
+              }}
+              onToChange={(next) => {
+                const range = applyDateRange('to', next, dateFrom, dateTo)
+                setDateFrom(range.from)
+                setDateTo(range.to)
+              }}
             />
             <select
               value={sort}
