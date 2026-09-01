@@ -18,6 +18,8 @@ export type Customer = {
   openingBalance: number
   status: CustomerStatus
   type: string
+  groupId?: number
+  groupAllowed?: boolean
   createdAt: string
 }
 
@@ -25,6 +27,7 @@ export type CustomerGroup = {
   groupId: number
   groupName: string
   accCount: number
+  totalBalance?: number
 }
 
 export type CustomerTxType = 'Credit' | 'Debit'

@@ -157,6 +157,7 @@ export function InfoIconCard({
   valueNode,
   valueTone,
   className = '',
+  onClick,
 }: {
   icon: 'user' | 'phone' | 'email' | 'pin' | 'clipboard' | 'down' | 'note' | 'calendar'
   iconTone: IconTone
@@ -165,11 +166,11 @@ export function InfoIconCard({
   valueNode?: ReactNode
   valueTone?: 'credit' | 'debit'
   className?: string
+  onClick?: () => void
 }) {
-  return (
-    <article
-      className={`flex items-start gap-3 rounded-2xl border border-line bg-[#fafbfc] p-3.5 ${className}`}
-    >
+  const interactive = Boolean(onClick)
+  const content = (
+    <>
       <div
         className={`grid size-10 shrink-0 place-items-center rounded-xl ${iconToneClass(iconTone)}`}
       >
@@ -189,8 +190,21 @@ export function InfoIconCard({
           {valueNode ?? <p className="m-0 font-bold">{value}</p>}
         </div>
       </div>
-    </article>
+    </>
   )
+  const classNameMerged = `flex w-full items-start gap-3 rounded-2xl border border-line bg-[#fafbfc] p-3.5 text-left ${
+    interactive ? 'cursor-pointer transition hover:border-[#e8c84a] hover:bg-[#fffdf5]' : ''
+  } ${className}`
+
+  if (interactive) {
+    return (
+      <button type="button" onClick={onClick} className={classNameMerged}>
+        {content}
+      </button>
+    )
+  }
+
+  return <article className={classNameMerged}>{content}</article>
 }
 
 export function SummaryCard({

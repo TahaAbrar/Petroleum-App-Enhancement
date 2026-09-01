@@ -31,6 +31,7 @@ import { panel } from './styles'
 
 type Props = {
   txPath: string
+  groupsPath?: string
 }
 
 const RECENT_LIMIT = 10
@@ -43,7 +44,7 @@ const EMPTY_SUMMARY: PortalFuelSummary = {
   others: 0,
 }
 
-export function CustomerPortalHome({ txPath }: Props) {
+export function CustomerPortalHome({ txPath, groupsPath = '/customer/groups' }: Props) {
   const navigate = useNavigate()
   const session = getSession()
   const [detail, setDetail] = useState<CustomerDetail | null>(null)
@@ -243,6 +244,12 @@ export function CustomerPortalHome({ txPath }: Props) {
               iconTone="sky"
               label="Account Type / Group"
               value={displayText(view.type)}
+              onClick={
+                detail?.groupAllowed && detail.groupId
+                  ? () => navigate(`${groupsPath}/${detail.groupId}`)
+                  : undefined
+              }
+              className={detail?.groupAllowed ? 'ring-1 ring-transparent' : ''}
             />
             <InfoIconCard
               icon="calendar"
