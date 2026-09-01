@@ -56,6 +56,8 @@ export default function App() {
         <Route element={<RoleRoute allow={['Customer']} />}>
           <Route path="/customer/dashboard" element={<CustomerDashboard />} />
           <Route path="/customer/transactions" element={<CustomerDashboard />} />
+          <Route path="/customer/groups" element={<CustomerDashboard />} />
+          <Route path="/customer/groups/:groupId" element={<CustomerDashboard />} />
         </Route>
 
         <Route element={<ProtectedRoute />}>

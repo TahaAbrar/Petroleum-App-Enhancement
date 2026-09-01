@@ -196,6 +196,37 @@ const summaryQuerySchema = z.object({
   dateTo: optionalIsoDate,
 })
 
+function parseGroupAllowed(gaValue, ownGroupId) {
+  const ga = cleanText(gaValue)
+  if (!ga) return { allowed: false, groupIds: [] }
+
+  const parts = ga.split(/[,;|]/).map((part) => part.trim()).filter(Boolean)
+  const numericIds = parts
+    .map((part) => Number(part))
+    .filter((id) => Number.isInteger(id) && id > 0)
+
+  if (numericIds.length > 0) {
+    return { allowed: true, groupIds: [...new Set(numericIds)] }
+  }
+
+  if (Number.isInteger(ownGroupId) && ownGroupId > 0) {
+    return { allowed: true, groupIds: [ownGroupId] }
+  }
+
+  return { allowed: false, groupIds: [] }
+}
+
+async function loadCustomerGroupAccess(pool, accid) {
+  const result = await pool.request().input('accid', sql.Int, accid).query(`
+    SELECT A.GroupId, A.GA
+    FROM dbo.AccReg A
+    WHERE A.Accid = @accid
+  `)
+  const row = result.recordset[0]
+  if (!row) return { allowed: false, groupIds: [] }
+  return parseGroupAllowed(row.GA, row.GroupId)
+}
+
 const DETAIL_SQL = `
   SELECT
     A.Accid,
@@ -209,6 +240,7 @@ const DETAIL_SQL = `
     A.Dated,
     A.Status,
     A.GroupId,
+    A.GA,
     G.GroupName,
     ISNULL((
       SELECT SUM(ISNULL(L2.Debit, 0)) - SUM(ISNULL(L2.Credit, 0))
@@ -226,7 +258,7 @@ const DETAIL_SQL = `
   WHERE A.Accid = @accid
   GROUP BY
     A.Accid, A.AccNo, A.AccName, A.Ph, A.Email, A.NIC, A.Address,
-    A.Description, A.Dated, A.Status, A.GroupId, G.GroupName
+    A.Description, A.Dated, A.Status, A.GroupId, A.GA, G.GroupName
 `
 
 async function loadFuelSummary(pool, accid, dateFrom, dateTo) {
@@ -281,6 +313,7 @@ portalRouter.get('/me', async (req, res) => {
     }
 
     const fuelSummary = await loadFuelSummary(pool, accid, dateFrom, dateTo)
+    const groupAccess = parseGroupAllowed(row.GA, row.GroupId)
 
     return res.json({
       ok: true,
@@ -298,6 +331,8 @@ portalRouter.get('/me', async (req, res) => {
         openingBalance: money(row.OpeningBalance),
         status: mapStatus(row.Status),
         type: cleanText(row.GroupName),
+        groupId: row.GroupId,
+        groupAllowed: groupAccess.allowed,
         createdAt: isoDate(row.Dated),
         totalCredit: money(row.TotalCredit),
         totalDebit: money(row.TotalDebit),
@@ -352,6 +387,185 @@ function ticketNo(mvno) {
   const s = cleanText(mvno)
   return s || '0'
 }
+
+portalRouter.get('/groups', async (req, res) => {
+  const accid = requirePortalAccid(req, res)
+  if (accid == null) return
+
+  try {
+    const pool = await getPool()
+    const access = await loadCustomerGroupAccess(pool, accid)
+    if (!access.allowed || access.groupIds.length === 0) {
+      return res.status(403).json({ ok: false, message: 'Group access not allowed' })
+    }
+
+    const placeholders = access.groupIds.map((_, index) => `@gid${index}`).join(', ')
+    const request = pool.request()
+    access.groupIds.forEach((groupId, index) => {
+      request.input(`gid${index}`, sql.Int, groupId)
+    })
+
+    const result = await request.query(`
+      SELECT
+        G.GroupId,
+        G.GroupName,
+        COUNT(A.Accid) AS AccCount,
+        ISNULL(SUM(Bal.CurrentBalance), 0) AS TotalBalance
+      FROM dbo.GroupReg G
+      INNER JOIN dbo.AccReg A ON A.GroupId = G.GroupId
+      OUTER APPLY (
+        SELECT SUM(ISNULL(L.Debit, 0)) - SUM(ISNULL(L.Credit, 0)) AS CurrentBalance
+        FROM dbo.Leger L
+        WHERE L.Accid = A.Accid
+      ) Bal
+      WHERE G.GroupId IN (${placeholders})
+      GROUP BY G.GroupId, G.GroupName
+      ORDER BY G.GroupName
+    `)
+
+    return res.json({
+      ok: true,
+      groups: result.recordset.map((row) => ({
+        groupId: row.GroupId,
+        groupName: cleanText(row.GroupName) || '—',
+        accCount: money(row.AccCount),
+        totalBalance: money(row.TotalBalance),
+      })),
+    })
+  } catch (err) {
+    return dbFail(res, err)
+  }
+})
+
+portalRouter.get('/groups/:groupId', async (req, res) => {
+  const accid = requirePortalAccid(req, res)
+  if (accid == null) return
+
+  const groupId = Number(req.params.groupId)
+  if (!Number.isInteger(groupId) || groupId <= 0) {
+    return res.status(400).json({ ok: false, message: 'Invalid group' })
+  }
+
+  const queryParsed = summaryQuerySchema.safeParse(req.query)
+  if (!queryParsed.success) {
+    return res.status(400).json({ ok: false, message: 'Invalid request' })
+  }
+  const { from: dateFrom, to: dateTo } = resolveTxDateRange(queryParsed.data)
+  const hasFrom = dateFrom ? 1 : 0
+  const hasTo = dateTo ? 1 : 0
+
+  try {
+    const pool = await getPool()
+    const access = await loadCustomerGroupAccess(pool, accid)
+    if (!access.allowed || !access.groupIds.includes(groupId)) {
+      return res.status(403).json({ ok: false, message: 'Group access not allowed' })
+    }
+
+    const groupResult = await pool
+      .request()
+      .input('groupId', sql.Int, groupId)
+      .query(`
+        SELECT GroupId, GroupName
+        FROM dbo.GroupReg
+        WHERE GroupId = @groupId
+      `)
+    const groupRow = groupResult.recordset[0]
+    if (!groupRow) {
+      return res.status(404).json({ ok: false, message: 'Group not found' })
+    }
+
+    const accountsResult = await pool
+      .request()
+      .input('groupId', sql.Int, groupId)
+      .input('hasFrom', sql.Bit, hasFrom)
+      .input('hasTo', sql.Bit, hasTo)
+      .input('dateFrom', sql.Date, dateFrom || '1900-01-01')
+      .input('dateTo', sql.Date, dateTo || '1900-01-01')
+      .query(`
+        SELECT
+          A.Accid,
+          A.AccNo,
+          A.AccName,
+          A.Ph,
+          A.Email,
+          A.Dated,
+          A.Status,
+          ISNULL(A.OpBal, 0) + ISNULL((
+            SELECT SUM(ISNULL(L2.Debit, 0)) - SUM(ISNULL(L2.Credit, 0))
+            FROM dbo.Leger L2
+            WHERE L2.Accid = A.Accid
+              AND (
+                (@hasFrom = 1 AND CAST(L2.Dated AS date) < @dateFrom)
+                OR (@hasFrom = 0 AND L2.Dated < CAST(GETDATE() AS date))
+              )
+          ), 0) AS OpeningBalance,
+          ISNULL((
+            SELECT SUM(ISNULL(L3.Debit, 0)) - SUM(ISNULL(L3.Credit, 0))
+            FROM dbo.Leger L3
+            WHERE L3.Accid = A.Accid
+              AND (@hasTo = 0 OR CAST(L3.Dated AS date) <= @dateTo)
+              AND (@hasFrom = 0 OR @hasTo = 1 OR CAST(L3.Dated AS date) >= @dateFrom)
+          ), 0) AS CurrentBalance,
+          ISNULL((
+            SELECT SUM(ISNULL(L4.Debit, 0))
+            FROM dbo.Leger L4
+            WHERE L4.Accid = A.Accid
+              AND (@hasFrom = 0 OR CAST(L4.Dated AS date) >= @dateFrom)
+              AND (@hasTo = 0 OR CAST(L4.Dated AS date) <= @dateTo)
+          ), 0) AS TotalDebit,
+          ISNULL((
+            SELECT SUM(ISNULL(L5.Credit, 0))
+            FROM dbo.Leger L5
+            WHERE L5.Accid = A.Accid
+              AND (@hasFrom = 0 OR CAST(L5.Dated AS date) >= @dateFrom)
+              AND (@hasTo = 0 OR CAST(L5.Dated AS date) <= @dateTo)
+          ), 0) AS TotalCredit
+        FROM dbo.AccReg A
+        WHERE A.GroupId = @groupId
+        ORDER BY A.AccName
+      `)
+
+    const accounts = accountsResult.recordset.map((row) => {
+      const openingBalance = money(row.OpeningBalance)
+      const debit = money(row.TotalDebit)
+      const credit = money(row.TotalCredit)
+      const currentBalance =
+        hasFrom || hasTo ? openingBalance + debit - credit : money(row.CurrentBalance)
+
+      return {
+        accid: row.Accid,
+        id: cleanText(row.AccNo) || String(row.Accid),
+        name: cleanText(row.AccName) || '—',
+        phone: cleanText(row.Ph),
+        email: cleanText(row.Email),
+        date: formatLedgerDate(row.Dated) || '—',
+        status: mapStatus(row.Status),
+        openingBalance,
+        currentBalance,
+        debit,
+        credit,
+      }
+    })
+
+    return res.json({
+      ok: true,
+      dateFrom: dateFrom || '',
+      dateTo: dateTo || '',
+      group: {
+        groupId: groupRow.GroupId,
+        groupName: cleanText(groupRow.GroupName) || '—',
+        accCount: accounts.length,
+        totalOpening: accounts.reduce((sum, row) => sum + row.openingBalance, 0),
+        totalBalance: accounts.reduce((sum, row) => sum + row.currentBalance, 0),
+        totalDebit: accounts.reduce((sum, row) => sum + row.debit, 0),
+        totalCredit: accounts.reduce((sum, row) => sum + row.credit, 0),
+      },
+      accounts,
+    })
+  } catch (err) {
+    return dbFail(res, err)
+  }
+})
 
 portalRouter.get('/transactions', async (req, res) => {
   const accid = requirePortalAccid(req, res)

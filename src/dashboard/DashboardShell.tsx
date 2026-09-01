@@ -15,6 +15,7 @@ import { ReportsPage } from './ReportsPage'
 import { CashBookPage } from './CashBookPage'
 import { ChartOfAccountsPage } from './ChartOfAccountsPage'
 import { CustomerPortalHome } from './CustomerPortalHome'
+import { CustomerPortalGroups } from './CustomerPortalGroups'
 import { CustomerPortalTransactions } from './CustomerPortalTransactions'
 import {
   FALLBACK_COMPANY,
@@ -51,6 +52,10 @@ export function DashboardShell({ config }: Props) {
   const coaNav = nav.find((item) => item.id === 'chartOfAccounts')
   const stockNav = nav.find((item) => item.id === 'reports')
   const stockPath = stockNav?.path ?? '/reports'
+  const isCustomerPortal = kind === 'customer'
+  const customerGroupsPath = '/customer/groups'
+  const isCustomerGroups =
+    isCustomerPortal && location.pathname.startsWith(`${customerGroupsPath}`)
   const active =
     nav.find((item) => {
       if (item.id === 'customers') {
@@ -68,6 +73,11 @@ export function DashboardShell({ config }: Props) {
           location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
         )
       }
+      if (item.id === 'dashboard' && isCustomerPortal) {
+        return (
+          location.pathname === item.path || location.pathname.startsWith(`${customerGroupsPath}`)
+        )
+      }
       return item.path === location.pathname
     })?.id ?? 'dashboard'
   const activeLabel = nav.find((n) => n.id === active)?.label || 'Dashboard'
@@ -77,7 +87,6 @@ export function DashboardShell({ config }: Props) {
   const initial = displayName.charAt(0).toUpperCase()
   const showSection = active !== 'dashboard'
   const isCustomers = active === 'customers'
-  const isCustomerPortal = kind === 'customer'
   const shortAddress = truncateAddress(company.address)
 
   useEffect(() => {
@@ -402,8 +411,10 @@ export function DashboardShell({ config }: Props) {
         </header>
 
         <div className="flex flex-col gap-3.5 px-4 pb-4 pt-1 lg:gap-[1.15rem] lg:px-6 lg:pb-8 lg:pt-2">
-          {isCustomerPortal && active === 'dashboard' ? (
-            <CustomerPortalHome txPath={txPath} />
+          {isCustomerPortal && isCustomerGroups ? (
+            <CustomerPortalGroups homePath={homePath} groupsPath={customerGroupsPath} />
+          ) : isCustomerPortal && active === 'dashboard' ? (
+            <CustomerPortalHome txPath={txPath} groupsPath={customerGroupsPath} />
           ) : isCustomerPortal && active === 'transactions' ? (
             <CustomerPortalTransactions homePath={homePath} />
           ) : active === 'customers' ? (
@@ -520,7 +531,7 @@ export function DashboardShell({ config }: Props) {
               id="logout-confirm-title"
               className="m-0 text-[1.1rem] font-extrabold tracking-[-0.02em] text-ink"
             >
-              Logout Confirmation
+              LogOut Confirmation
             </h2>
             <p className="mt-2 mb-0 text-[0.88rem] font-medium leading-relaxed text-muted">
               Are you sure you want to log out?

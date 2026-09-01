@@ -23,6 +23,28 @@ export type PortalTransaction = {
   balance: number
 }
 
+export type PortalGroupAccount = {
+  accid: number
+  id: string
+  name: string
+  phone: string
+  date: string
+  openingBalance: number
+  currentBalance: number
+  debit: number
+  credit: number
+}
+
+export type PortalGroupDetail = {
+  groupId: number
+  groupName: string
+  accCount: number
+  totalOpening: number
+  totalBalance: number
+  totalDebit: number
+  totalCredit: number
+}
+
 export type PortalAccountMeta = {
   id: string
   name: string
@@ -123,5 +145,83 @@ export async function fetchPortalTransactions(
     totalDebit: data.totalDebit ?? 0,
     totalCredit: data.totalCredit ?? 0,
     account: data.account ?? { id: '—', name: '—', groupName: '—' },
+  }
+}
+
+type GroupsResponse = {
+  ok: true
+  groups: Array<{
+    groupId: number
+    groupName: string
+    accCount: number
+    totalBalance: number
+  }>
+}
+
+type GroupDetailResponse = {
+  ok: true
+  dateFrom?: string
+  dateTo?: string
+  group: PortalGroupDetail
+  accounts: PortalGroupAccount[]
+}
+
+function toAmount(value: unknown) {
+  if (value == null || value === '') return 0
+  const n = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+function mapGroupAccount(
+  row: Partial<PortalGroupAccount> & { accid: number },
+): PortalGroupAccount {
+  return {
+    accid: row.accid,
+    id: row.id || String(row.accid),
+    name: row.name || '—',
+    phone: row.phone || '',
+    date: row.date || '—',
+    openingBalance: toAmount(row.openingBalance),
+    currentBalance: toAmount(row.currentBalance),
+    debit: toAmount(row.debit),
+    credit: toAmount(row.credit),
+  }
+}
+
+function mapGroupDetail(group: Partial<PortalGroupDetail> & { groupId: number; groupName: string }) {
+  return {
+    groupId: group.groupId,
+    groupName: group.groupName || '—',
+    accCount: toAmount(group.accCount),
+    totalOpening: toAmount(group.totalOpening),
+    totalBalance: toAmount(group.totalBalance),
+    totalDebit: toAmount(group.totalDebit),
+    totalCredit: toAmount(group.totalCredit),
+  }
+}
+
+export async function fetchPortalGroups(signal?: AbortSignal) {
+  const data = await apiGet<GroupsResponse>('/api/portal/groups', { signal })
+  return data.groups
+}
+
+export async function fetchPortalGroupDetail(
+  groupId: number,
+  params: { dateFrom?: string; dateTo?: string } = {},
+  signal?: AbortSignal,
+) {
+  const q = new URLSearchParams()
+  if (params.dateFrom) q.set('dateFrom', params.dateFrom)
+  if (params.dateTo) q.set('dateTo', params.dateTo)
+  const qs = q.toString()
+  const data = await apiGet<GroupDetailResponse>(
+    `/api/portal/groups/${groupId}${qs ? `?${qs}` : ''}`,
+    { signal },
+  )
+  return {
+    dateFrom: data.dateFrom || '',
+    dateTo: data.dateTo || '',
+    group: mapGroupDetail(data.group),
+    accounts: data.accounts.map(mapGroupAccount),
   }
 }
