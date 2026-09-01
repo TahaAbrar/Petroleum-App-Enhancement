@@ -28,13 +28,16 @@ export type CashbookMeta = {
 export type CashbookEntry = {
   trid: number
   vno: string
+  accid: number
   accNo: string
   accName: string
   groupName: string
+  phone: string
   mvno: string
   debit: number
   credit: number
   description: string
+  dated: string
   dno: number | null
 }
 
@@ -50,6 +53,19 @@ export function formatCashbookAmount(value: number) {
   return value.toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
+  })
+}
+
+export function formatCashbookDate(iso: string) {
+  if (!iso) return '—'
+  const dayPart = String(iso).slice(0, 10)
+  const [year, month, day] = dayPart.split('-').map(Number)
+  if (!year || !month || !day) return '—'
+  const date = new Date(year, month - 1, day)
+  return date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
   })
 }
 

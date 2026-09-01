@@ -34,6 +34,16 @@ function roundMoney(value) {
   return Math.round(money(value) * 10000) / 10000
 }
 
+function isoDate(value) {
+  if (!value) return ''
+  const d = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 function dbFail(res, err) {
   console.error('[cashbook] db error', err.message)
   return res.status(503).json({
@@ -97,14 +107,16 @@ async function loadWebEntries(pool) {
     SELECT
       L.Trid,
       L.VNo,
+      A.Accid,
       A.AccNo,
       A.AccName,
+      A.Ph,
       G.GroupName,
       L.MVNo,
       L.Debit,
       L.Credit,
       L.Description,
-      L.Dated,
+      CONVERT(varchar(10), L.Dated, 23) AS Dated,
       L.Timed,
       L.DNo
     FROM dbo.Leger L
@@ -117,13 +129,18 @@ async function loadWebEntries(pool) {
   return result.recordset.map((row) => ({
     trid: money(row.Trid),
     vno: row.VNo == null ? '' : String(row.VNo),
+    accid: money(row.Accid),
     accNo: cleanText(row.AccNo) || '—',
     accName: cleanText(row.AccName) || '—',
     groupName: cleanText(row.GroupName) || '—',
+    phone: cleanText(row.Ph),
     mvno: cleanText(row.MVNo),
     debit: money(row.Debit),
     credit: money(row.Credit),
     description: cleanText(row.Description),
+    dated: /^\d{4}-\d{2}-\d{2}$/.test(cleanText(row.Dated))
+      ? cleanText(row.Dated)
+      : isoDate(row.Dated),
     dno: row.DNo == null ? null : money(row.DNo),
   }))
 }
