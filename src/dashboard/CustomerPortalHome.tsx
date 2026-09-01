@@ -306,7 +306,7 @@ export function CustomerPortalHome({ txPath }: Props) {
             View all{recentTotal > RECENT_LIMIT ? ` (${recentTotal})` : ''}
           </button>
         </div>
-        <PortalTxTable rows={recent} loading={recentLoading} showOpening={false} />
+        <PortalTxTable rows={recent} loading={recentLoading} showOpening={false} showTotals={false} />
       </section>
     </div>
   )

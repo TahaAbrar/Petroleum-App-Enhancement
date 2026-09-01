@@ -14,6 +14,8 @@ export type PortalHistoryState = {
   rows: PortalTransaction[]
   total: number
   openingBalance: number
+  totalDebit: number
+  totalCredit: number
   account: PortalAccountMeta | null
   loading: boolean
   loadingMore: boolean
@@ -34,6 +36,8 @@ export function usePortalHistory(
   const [fetched, setFetched] = useState<PortalTransaction[]>([])
   const [total, setTotal] = useState(0)
   const [openingBalance, setOpeningBalance] = useState(0)
+  const [totalDebit, setTotalDebit] = useState(0)
+  const [totalCredit, setTotalCredit] = useState(0)
   const [account, setAccount] = useState<PortalAccountMeta | null>(null)
   const [visible, setVisible] = useState(PAGE)
   const [loading, setLoading] = useState(true)
@@ -74,6 +78,8 @@ export function usePortalHistory(
         setFetched(data.transactions)
         setTotal(data.total)
         setOpeningBalance(data.openingBalance)
+        setTotalDebit(data.totalDebit)
+        setTotalCredit(data.totalCredit)
         setAccount(data.account)
         setVisible(Math.min(PAGE, data.total))
       })
@@ -114,6 +120,8 @@ export function usePortalHistory(
         })
         setTotal(data.total)
         setOpeningBalance(data.openingBalance)
+        setTotalDebit(data.totalDebit)
+        setTotalCredit(data.totalCredit)
         setAccount(data.account)
         setFetched((prev) => {
           const seen = new Set(prev.map((row) => row.trid))
@@ -152,6 +160,8 @@ export function usePortalHistory(
     rows: fetched.slice(0, Math.min(visible, fetched.length)),
     total,
     openingBalance,
+    totalDebit,
+    totalCredit,
     account: account ?? (loading ? null : EMPTY_ACCOUNT),
     loading,
     loadingMore,

@@ -46,6 +46,8 @@ type TxResponse = {
   offset: number
   limit: number
   openingBalance: number
+  totalDebit: number
+  totalCredit: number
   account: PortalAccountMeta
   transactions: Array<Partial<PortalTransaction> & { trid: number; balance: number }>
 }
@@ -118,6 +120,8 @@ export async function fetchPortalTransactions(
     transactions: data.transactions.map(mapPortalTx),
     total: data.total,
     openingBalance: data.openingBalance ?? 0,
+    totalDebit: data.totalDebit ?? 0,
+    totalCredit: data.totalCredit ?? 0,
     account: data.account ?? { id: '—', name: '—', groupName: '—' },
   }
 }

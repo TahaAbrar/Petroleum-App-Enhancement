@@ -7,7 +7,10 @@ import { panel } from './styles'
 type Props = {
   rows: PortalTransaction[]
   openingBalance?: number
+  totalDebit?: number
+  totalCredit?: number
   showOpening?: boolean
+  showTotals?: boolean
   loading?: boolean
   emptyMessage?: string
   afterFiveMobileRef?: RefObject<HTMLLIElement | null>
@@ -45,7 +48,10 @@ const td = 'border border-[#c5c9d2] px-2 py-2 align-top text-[0.82rem] text-ink'
 export function PortalTxTable({
   rows,
   openingBalance = 0,
+  totalDebit = 0,
+  totalCredit = 0,
   showOpening = true,
+  showTotals = true,
   loading = false,
   emptyMessage = 'No records found.',
   afterFiveMobileRef,
@@ -87,7 +93,7 @@ export function PortalTxTable({
                 </p>
               </div>
               <div className="shrink-0 text-right text-[0.72rem] font-semibold text-muted">
-                <p className="m-0">Ticket {cell(row.ticket) || '0'}</p>
+                <p className="m-0">M.Voucher {cell(row.ticket) || '0'}</p>
                 <p className="mt-0.5 mb-0">V.No {cell(row.vno) || '0'}</p>
               </div>
             </div>
@@ -110,6 +116,15 @@ export function PortalTxTable({
         {!loading && rows.length === 0 && (
           <li className="px-4 py-8 text-center text-sm font-medium text-muted">{emptyMessage}</li>
         )}
+        {showTotals && !loading ? (
+          <li className="border-t-2 border-ink/15 bg-[#f7f8fa] px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[0.84rem]">
+              <span className="font-extrabold text-ink">Total</span>
+              <span className="font-extrabold text-debit">Dr {formatPkrAmount(totalDebit)}</span>
+              <span className="font-extrabold text-credit">Cr {formatPkrAmount(totalCredit)}</span>
+            </div>
+          </li>
+        ) : null}
         {loadingMore ? (
           <li className="px-4 py-2">
             <LoadingHint compact label="Loading more…" />
@@ -125,7 +140,7 @@ export function PortalTxTable({
             <tr>
               <th className={`${th} w-[9%]`}>Date</th>
               <th className={`${th} w-[38%]`}>Descriptions</th>
-              <th className={`${th} w-[9%]`}>Ticket #</th>
+              <th className={`${th} w-[9%]`}>M.voucher</th>
               <th className={`${th} w-[8%]`}>V.No</th>
               <th className={`${th} w-[12%]`}>Debit</th>
               <th className={`${th} w-[12%]`}>Credit</th>
@@ -169,6 +184,20 @@ export function PortalTxTable({
                 </td>
               </tr>
             ))}
+            {showTotals && !loading ? (
+              <tr className="bg-[#f7f8fa]">
+                <td className={`${td} font-extrabold`} colSpan={4}>
+                  Total
+                </td>
+                <td className={`${td} text-right font-extrabold text-debit`}>
+                  {formatPkrAmount(totalDebit)}
+                </td>
+                <td className={`${td} text-right font-extrabold text-credit`}>
+                  {formatPkrAmount(totalCredit)}
+                </td>
+                <td className={td} />
+              </tr>
+            ) : null}
           </tbody>
         </table>
         {loading && (

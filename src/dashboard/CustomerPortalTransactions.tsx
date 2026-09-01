@@ -127,7 +127,10 @@ export function CustomerPortalTransactions({ homePath }: Props) {
       <PortalTxTable
         rows={history.rows}
         openingBalance={history.openingBalance}
+        totalDebit={history.totalDebit}
+        totalCredit={history.totalCredit}
         showOpening
+        showTotals
         loading={history.loading}
         loadingMore={history.loadingMore}
         emptyMessage={emptyMessage}

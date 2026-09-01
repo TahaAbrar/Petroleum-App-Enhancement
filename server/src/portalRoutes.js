@@ -441,11 +441,16 @@ portalRouter.get('/transactions', async (req, res) => {
     countReq.input('dateTo', sql.Date, dateTo || '1900-01-01')
     const countResult = await countReq.query(`
       ${cte}
-      SELECT COUNT(*) AS Total
+      SELECT
+        COUNT(*) AS Total,
+        SUM(ISNULL(Tx.Debit, 0)) AS TotalDebit,
+        SUM(ISNULL(Tx.Credit, 0)) AS TotalCredit
       FROM Tx
       ${filterSql}
     `)
     const total = money(countResult.recordset[0]?.Total)
+    const totalDebit = money(countResult.recordset[0]?.TotalDebit)
+    const totalCredit = money(countResult.recordset[0]?.TotalCredit)
 
     const listReq = pool.request()
     listReq.input('accid', sql.Int, accid)
@@ -496,6 +501,8 @@ portalRouter.get('/transactions', async (req, res) => {
       offset,
       limit,
       openingBalance,
+      totalDebit,
+      totalCredit,
       account: {
         id: cleanText(meta.AccNo) || String(accid),
         name: cleanText(meta.AccName) || '—',
