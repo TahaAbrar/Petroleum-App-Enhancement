@@ -86,7 +86,8 @@ export async function loginHandler(req, res) {
       })
     }
 
-    if (isDisabledStatus(staffUser.Status)) {
+    const role = normalizeRole(staffUser.Type)
+    if (isDisabledStatus(staffUser.Status) || role === 'User') {
       return res.status(403).json({
         ok: false,
         message: 'Account is disabled. Contact administrator.',
@@ -95,7 +96,6 @@ export async function loginHandler(req, res) {
 
     clearLoginAttempts(ip, username)
 
-    const role = normalizeRole(staffUser.Type)
     const redirectTo = dashboardPathForRole(role)
     const token = signToken({
       sub: String(staffUser.UserId),

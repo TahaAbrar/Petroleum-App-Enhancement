@@ -79,6 +79,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
   const [summary, setSummary] = useState<TransactionSummary>(() => seeded?.summary ?? EMPTY_TX_SUMMARY)
   const [visible, setVisible] = useState(() => Math.min(TX_CHUNK, seeded?.rows.length ?? 0))
   const [loading, setLoading] = useState(() => !seeded)
+  const [deleteRow, setDeleteRow] = useState<TransactionRow | null>(null)
   const fetchedRef = useRef(fetched)
   const afterFiveMobileRef = useRef<HTMLLIElement | null>(null)
   const afterFiveDesktopRef = useRef<HTMLTableRowElement | null>(null)
@@ -384,6 +385,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
                   }
                   canView={canViewCustomer}
                   onView={openCustomer}
+                  onDelete={setDeleteRow}
                 />
               ))}
               <div ref={mobileSentinelRef} className="h-4 shrink-0" />
@@ -392,12 +394,13 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
             <div className="hidden min-w-0 lg:block">
               <table className="w-full table-fixed border-collapse">
                 <colgroup>
-                  <col className="w-[12%]" />
+                  <col className="w-[11%]" />
                   <col className="w-[8%]" />
-                  <col className="w-[30%]" />
+                  <col className="w-[26%]" />
                   <col className="w-[12%]" />
-                  <col className="w-[19%]" />
-                  <col className="w-[19%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[11%]" />
                 </colgroup>
                 <thead>
                   <tr>
@@ -407,6 +410,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
                     <Th>Type</Th>
                     <Th className="text-right">Debit</Th>
                     <Th className="text-right">Credit</Th>
+                    <Th className="text-center">Action</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -450,6 +454,16 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
                         </Td>
                         <Td className={`text-right font-bold ${row.credit > 0 ? 'text-credit' : ''}`}>
                           {ledgerAmount(row.credit)}
+                        </Td>
+                        <Td className="text-center">
+                          <button
+                            type="button"
+                            onClick={() => setDeleteRow(row)}
+                            className="inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border-0 bg-debit-bg text-debit hover:brightness-95"
+                            aria-label="Delete transaction"
+                          >
+                            <DeleteIcon />
+                          </button>
                         </Td>
                       </tr>
                     )),
@@ -496,6 +510,49 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
           </>
         )}
       </section>
+
+      {deleteRow ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="presentation">
+          <button
+            type="button"
+            className="absolute inset-0 border-0 bg-ink/45 backdrop-blur-[2px]"
+            aria-label="Close delete confirmation"
+            onClick={() => setDeleteRow(null)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="tx-delete-title"
+            className="relative z-10 w-full max-w-[22rem] rounded-2xl border border-line bg-white p-5 shadow-[0_20px_50px_rgba(26,29,33,0.2)] animate-rise"
+          >
+            <h2
+              id="tx-delete-title"
+              className="m-0 text-[1.1rem] font-extrabold tracking-[-0.02em] text-ink"
+            >
+              Delete Confirmation
+            </h2>
+            <p className="mt-2 mb-0 text-[0.88rem] font-medium leading-relaxed text-muted">
+              Are you sure you want to delete this transaction?
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setDeleteRow(null)}
+                className="cursor-pointer rounded-xl border border-line bg-white px-4 py-2.5 text-[0.85rem] font-bold text-ink hover:bg-[#f7f8fa]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteRow(null)}
+                className="cursor-pointer rounded-xl border-0 bg-[#e11d48] px-4 py-2.5 text-[0.85rem] font-bold text-white shadow-[0_6px_14px_rgba(225,29,72,0.28)] hover:brightness-95"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -505,11 +562,13 @@ function MobileVoucherCard({
   cardRef,
   canView,
   onView,
+  onDelete,
 }: {
   group: { key: string; rows: TransactionRow[] }
   cardRef?: Ref<HTMLLIElement>
   canView: boolean
   onView: (row: TransactionRow) => void
+  onDelete: (row: TransactionRow) => void
 }) {
   return (
     <li ref={cardRef} className={`${panel} rounded-2xl p-3.5`}>
@@ -543,6 +602,16 @@ function MobileVoucherCard({
                   {ledgerAmount(row.credit)}
                 </p>
               </div>
+            </div>
+            <div className="mt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => onDelete(row)}
+                className="inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border-0 bg-debit-bg text-debit hover:brightness-95"
+                aria-label="Delete transaction"
+              >
+                <DeleteIcon />
+              </button>
             </div>
           </li>
         ))}
@@ -627,6 +696,20 @@ function SummaryDesktop({
         </h3>
       </div>
     </article>
+  )
+}
+
+function DeleteIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M5 7h14M10 7V5h4v2M8 7v12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V7"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   )
 }
 

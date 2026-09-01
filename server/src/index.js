@@ -94,7 +94,7 @@ app.use(
   transactionLimiter,
   requireReadKey,
   requireAuth,
-  requireRoles('Administrator', 'Accountant', 'User'),
+  requireRoles('Administrator', 'Accountant'),
   transactionRouter,
 )
 
@@ -103,7 +103,7 @@ app.use(
   transactionLimiter,
   requireReadKey,
   requireAuth,
-  requireRoles('Administrator', 'Accountant', 'User'),
+  requireRoles('Administrator', 'Accountant'),
   dashboardRouter,
 )
 
@@ -112,7 +112,7 @@ app.use(
   transactionLimiter,
   requireReadKey,
   requireAuth,
-  requireRoles('Administrator', 'Accountant', 'User', 'Customer'),
+  requireRoles('Administrator', 'Accountant', 'Customer'),
   companyRouter,
 )
 
@@ -130,7 +130,7 @@ app.use(
   transactionLimiter,
   requireReadKey,
   requireAuth,
-  requireRoles('Administrator', 'Accountant', 'User'),
+  requireRoles('Administrator', 'Accountant'),
   coaRouter,
 )
 
@@ -139,7 +139,7 @@ app.use(
   transactionLimiter,
   requireReadKey,
   requireAuth,
-  requireRoles('Administrator', 'Accountant', 'User'),
+  requireRoles('Administrator', 'Accountant'),
   reportsRouter,
 )
 

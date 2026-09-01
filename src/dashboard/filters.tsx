@@ -84,6 +84,47 @@ export function applyDateRange(
   return { from, to: next }
 }
 
+const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+]
+
+function pad2(n: number) {
+  return String(n).padStart(2, '0')
+}
+
+function toIso(year: number, monthIndex: number, day: number) {
+  return `${year}-${pad2(monthIndex + 1)}-${pad2(day)}`
+}
+
+function parseIsoDay(iso: string) {
+  const match = String(iso || '')
+    .slice(0, 10)
+    .match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2]) - 1
+  const day = Number(match[3])
+  if (!year || month < 0 || month > 11 || day < 1) return null
+  return { year, month, day }
+}
+
+function todayIso() {
+  const now = new Date()
+  return toIso(now.getFullYear(), now.getMonth(), now.getDate())
+}
+
 function DatePill({
   label,
   value,
@@ -97,62 +138,153 @@ function DatePill({
   variant: FilterVariant
   fullWidth?: boolean
 }) {
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [viewYear, setViewYear] = useState(() => parseIsoDay(value)?.year ?? new Date().getFullYear())
+  const [viewMonth, setViewMonth] = useState(() => parseIsoDay(value)?.month ?? new Date().getMonth())
 
-  function openPicker() {
-    const el = inputRef.current
-    if (!el) return
-    try {
-      if (typeof el.showPicker === 'function') {
-        el.showPicker()
-        return
-      }
-    } catch {
-      /* fall through */
+  useEffect(() => {
+    if (!open) return
+    const parsed = parseIsoDay(value)
+    const today = new Date()
+    setViewYear(parsed?.year ?? today.getFullYear())
+    setViewMonth(parsed?.month ?? today.getMonth())
+    function onDoc(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
     }
-    el.focus()
-    el.click()
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open, value])
+
+  const cells = useMemo(() => {
+    const first = new Date(viewYear, viewMonth, 1)
+    const startPad = first.getDay()
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
+    const list: Array<{ iso: string; day: number; inMonth: boolean }> = []
+    for (let i = 0; i < startPad; i++) list.push({ iso: '', day: 0, inMonth: false })
+    for (let day = 1; day <= daysInMonth; day++) {
+      list.push({ iso: toIso(viewYear, viewMonth, day), day, inMonth: true })
+    }
+    return list
+  }, [viewYear, viewMonth])
+
+  function shiftMonth(delta: number) {
+    const next = new Date(viewYear, viewMonth + delta, 1)
+    setViewYear(next.getFullYear())
+    setViewMonth(next.getMonth())
   }
 
   return (
-    <div className={`${boxClass(variant, fullWidth)} ${fullWidth ? 'flex-1' : ''}`}>
-      <button
-        type="button"
-        className="absolute inset-0 z-[1] cursor-pointer rounded-[inherit] border-0 bg-transparent"
-        aria-label={`${label} date`}
-        onClick={openPicker}
-      />
-      <CalendarIcon />
-      <span className={`relative z-0 min-w-0 flex-1 truncate ${value ? 'text-ink' : 'text-muted'}`}>
-        {value ? formatFilterDate(value) : label}
-      </span>
-      {value ? (
+    <div ref={rootRef} className={`relative ${fullWidth ? 'flex-1' : ''}`}>
+      <div className={`${boxClass(variant, fullWidth)} ${fullWidth ? 'w-full' : ''}`}>
         <button
           type="button"
-          className="relative z-[2] grid size-5 shrink-0 place-items-center rounded-full border-0 bg-[#f3f4f6] text-muted hover:text-ink"
-          aria-label={`Clear ${label.toLowerCase()} date`}
-          onClick={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            onChange('')
-          }}
+          aria-label={`${label} date`}
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          onClick={() => setOpen((c) => !c)}
+          className="absolute inset-0 z-[1] cursor-pointer rounded-[inherit] border-0 bg-transparent"
+        />
+        <CalendarIcon />
+        <span className={`relative z-0 min-w-0 flex-1 truncate ${value ? 'text-ink' : 'text-muted'}`}>
+          {value ? formatFilterDate(value) : label}
+        </span>
+        {value ? (
+          <button
+            type="button"
+            className="relative z-[2] grid size-5 shrink-0 place-items-center rounded-full border-0 bg-[#f3f4f6] text-muted hover:text-ink"
+            aria-label={`Clear ${label.toLowerCase()} date`}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onChange('')
+              setOpen(false)
+            }}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+            </svg>
+          </button>
+        ) : (
+          <span className="relative z-0">
+            <ChevronIcon />
+          </span>
+        )}
+      </div>
+      {open ? (
+        <div
+          role="dialog"
+          aria-label={`${label} calendar`}
+          className="absolute top-[calc(100%+6px)] left-0 z-[90] w-[17.5rem] rounded-2xl border border-line bg-white p-3 shadow-[0_12px_32px_rgba(26,29,33,0.14)]"
         >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-          </svg>
-        </button>
-      ) : (
-        <ChevronIcon />
-      )}
-      <input
-        ref={inputRef}
-        type="date"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="sr-only"
-        tabIndex={-1}
-        aria-hidden="true"
-      />
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              className="grid size-8 cursor-pointer place-items-center rounded-lg border-0 bg-transparent text-ink hover:bg-[#f7f8fa]"
+              aria-label="Previous month"
+              onClick={() => shiftMonth(-1)}
+            >
+              <span className="rotate-90">
+                <ChevronIcon />
+              </span>
+            </button>
+            <p className="m-0 text-[0.82rem] font-extrabold text-ink">
+              {MONTHS[viewMonth]} {viewYear}
+            </p>
+            <button
+              type="button"
+              className="grid size-8 cursor-pointer place-items-center rounded-lg border-0 bg-transparent text-ink hover:bg-[#f7f8fa]"
+              aria-label="Next month"
+              onClick={() => shiftMonth(1)}
+            >
+              <span className="-rotate-90">
+                <ChevronIcon />
+              </span>
+            </button>
+          </div>
+          <div className="grid grid-cols-7 gap-0.5">
+            {WEEKDAYS.map((d) => (
+              <span
+                key={d}
+                className="py-1 text-center text-[0.62rem] font-bold tracking-[0.04em] text-muted uppercase"
+              >
+                {d}
+              </span>
+            ))}
+            {cells.map((cell, i) => {
+              if (!cell.inMonth) return <span key={`e-${i}`} />
+              const active = cell.iso === value
+              const isToday = cell.iso === todayIso()
+              return (
+                <button
+                  key={cell.iso}
+                  type="button"
+                  onClick={() => {
+                    onChange(cell.iso)
+                    setOpen(false)
+                  }}
+                  className={`grid size-8 cursor-pointer place-items-center rounded-lg border-0 text-[0.78rem] font-bold ${
+                    active
+                      ? 'bg-fuel text-ink'
+                      : isToday
+                        ? 'bg-fuel-soft text-ink'
+                        : 'bg-transparent text-ink hover:bg-[#f7f8fa]'
+                  }`}
+                >
+                  {cell.day}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
