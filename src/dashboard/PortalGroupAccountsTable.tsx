@@ -5,10 +5,8 @@ import { panel } from './styles'
 
 type Props = {
   rows: PortalGroupAccount[]
-  openingBalance?: number
   totalDebit?: number
   totalCredit?: number
-  showOpening?: boolean
   showTotals?: boolean
   loading?: boolean
   emptyMessage?: string
@@ -37,10 +35,8 @@ const theadRow = 'bg-[#ffe58a]'
 
 export function PortalGroupAccountsTable({
   rows,
-  openingBalance = 0,
   totalDebit = 0,
   totalCredit = 0,
-  showOpening = true,
   showTotals = true,
   loading = false,
   emptyMessage = 'No accounts found in this group.',
@@ -49,16 +45,6 @@ export function PortalGroupAccountsTable({
     <div className={`${panel} overflow-hidden rounded-2xl`}>
       {/* Mobile */}
       <ul className="m-0 flex list-none flex-col p-0 lg:hidden">
-        {showOpening ? (
-          <li className="border-b border-[#ECEEF2] bg-linear-to-r from-fuel via-[#ffe58a] to-[#fff3c0] px-4 py-3">
-            <div className="flex items-center justify-between gap-3">
-              <p className="m-0 text-[0.9rem] font-extrabold text-ink">Opening Balance</p>
-              <p className="m-0 text-[0.9rem] font-extrabold text-ink">
-                {formatPkrAmount(openingBalance)}
-              </p>
-            </div>
-          </li>
-        ) : null}
         {rows.map((row) => (
           <li
             key={row.accid}
@@ -125,17 +111,6 @@ export function PortalGroupAccountsTable({
             </tr>
           </thead>
           <tbody>
-            {showOpening ? (
-              <tr className="bg-linear-to-r from-fuel via-[#ffe58a] to-[#fff3c0]">
-                <td className={td} />
-                <td className={`${td} font-extrabold`}>Opening Balance</td>
-                <td className={td} />
-                <td className={`${td} text-right font-extrabold`}>
-                  {formatPkrAmount(openingBalance)}
-                </td>
-                <td className={td} colSpan={3} />
-              </tr>
-            ) : null}
             {rows.map((row) => (
               <tr key={row.accid} className="bg-white">
                 <td className={`${td} whitespace-nowrap text-center`}>{row.date || '—'}</td>

@@ -203,10 +203,8 @@ function CustomerPortalGroupDetail({
 
       <PortalGroupAccountsTable
         rows={accounts}
-        openingBalance={summary?.totalOpening ?? 0}
         totalDebit={summary?.totalDebit ?? 0}
         totalCredit={summary?.totalCredit ?? 0}
-        showOpening={false}
         showTotals
         loading={loading}
         emptyMessage={emptyMessage}
