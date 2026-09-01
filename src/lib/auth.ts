@@ -50,7 +50,7 @@ export function homePathForRole(role: string): string {
   if (r === 'administrator' || r === 'admin') return '/dashboard'
   if (r === 'accountant') return '/accountant/dashboard'
   if (r === 'customer') return '/customer/dashboard'
-  return '/user/dashboard'
+  return '/login'
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || ''

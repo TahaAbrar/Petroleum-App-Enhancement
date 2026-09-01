@@ -4,9 +4,9 @@ import { toast } from '../toast'
 import {
   customerSlug,
   displayText,
+  formatFilterDate,
   type Customer,
   type CustomerGroup,
-  type CustomerStatus,
 } from './customers'
 import { applyDateRange, DateRangeFilter, MenuFilter } from './filters'
 import { CustomerDetailsPage } from './CustomerDetailsPage'
@@ -190,10 +190,6 @@ export function CustomersPage({ searchQuery = '' }: Props) {
     [groups],
   )
 
-  function handleDelete() {
-    toast.info('Delete is disabled to protect live ledger data')
-  }
-
   function openCustomer(row: Customer) {
     navigate(`${listPath}/${customerSlug(row)}`, { state: { customer: row } })
   }
@@ -265,14 +261,12 @@ export function CustomersPage({ searchQuery = '' }: Props) {
                       <CustomerMark />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="m-0 truncate text-[0.92rem] font-extrabold text-ink">{row.name}</p>
-                        </div>
-                        <ActionButtons onView={() => openCustomer(row)} onDelete={handleDelete} />
-                      </div>
+                      <p className="m-0 truncate text-[0.92rem] font-extrabold text-ink">{row.name}</p>
                       <p className="mt-2 mb-0 text-[0.78rem] font-medium text-[#4b5563]">
                         {displayText(row.phone)}
+                      </p>
+                      <p className="mt-1 mb-0 text-[0.72rem] font-semibold text-muted">
+                        {row.createdAt ? formatFilterDate(row.createdAt) : '—'} · {displayText(row.type)}
                       </p>
                       <div className="mt-2.5 flex items-center justify-between gap-2">
                         <p
@@ -282,7 +276,6 @@ export function CustomersPage({ searchQuery = '' }: Props) {
                         >
                           <PkrValue value={row.currentBalance} />
                         </p>
-                        <StatusPill status={row.status} />
                       </div>
                     </div>
                   </div>
@@ -293,17 +286,16 @@ export function CustomersPage({ searchQuery = '' }: Props) {
             </ul>
 
             <div className="-mx-1 hidden overflow-x-auto lg:block">
-              <table className="w-full min-w-[980px] border-collapse">
+              <table className="w-full min-w-[860px] border-collapse">
                 <thead>
                   <tr>
                     {[
+                      'Date',
                       'Customer Name',
                       'Phone',
-                      'Email',
-                      'Current Balance',
+                      'Group',
+                      'Closing Balance',
                       'Opening Balance',
-                      'Status',
-                      'Action',
                     ].map((h) => (
                       <th
                         key={h}
@@ -322,6 +314,9 @@ export function CustomersPage({ searchQuery = '' }: Props) {
                       className="cursor-pointer hover:bg-[#fcfcfd]"
                       onClick={() => openCustomer(row)}
                     >
+                      <td className="border-b border-[#f1f2f4] px-2.5 py-3.5 text-[0.84rem] whitespace-nowrap text-[#374151]">
+                        {row.createdAt ? formatFilterDate(row.createdAt) : '—'}
+                      </td>
                       <td className="border-b border-[#f1f2f4] px-2.5 py-3.5 text-[0.84rem] font-semibold whitespace-nowrap text-ink">
                         {row.name}
                       </td>
@@ -329,7 +324,7 @@ export function CustomersPage({ searchQuery = '' }: Props) {
                         {displayText(row.phone)}
                       </td>
                       <td className="border-b border-[#f1f2f4] px-2.5 py-3.5 text-[0.84rem] whitespace-nowrap text-[#374151]">
-                        {displayText(row.email)}
+                        {displayText(row.type)}
                       </td>
                       <td
                         className={`border-b border-[#f1f2f4] px-2.5 py-3.5 text-[0.84rem] font-bold whitespace-nowrap ${
@@ -340,15 +335,6 @@ export function CustomersPage({ searchQuery = '' }: Props) {
                       </td>
                       <td className="border-b border-[#f1f2f4] px-2.5 py-3.5 text-[0.84rem] whitespace-nowrap text-[#374151]">
                         <PkrValue value={row.openingBalance} />
-                      </td>
-                      <td className="border-b border-[#f1f2f4] px-2.5 py-3.5 whitespace-nowrap">
-                        <StatusPill status={row.status} />
-                      </td>
-                      <td
-                        className="border-b border-[#f1f2f4] px-2.5 py-3.5 whitespace-nowrap"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <ActionButtons onView={() => openCustomer(row)} onDelete={handleDelete} />
                       </td>
                     </tr>
                   ))}
@@ -365,56 +351,5 @@ export function CustomersPage({ searchQuery = '' }: Props) {
         )}
       </section>
     </>
-  )
-}
-
-function StatusPill({ status }: { status: CustomerStatus }) {
-  const active = status === 'Active'
-  return (
-    <span
-      className={`inline-flex rounded-full px-2.5 py-1 text-[0.72rem] font-bold ${
-        active ? 'bg-credit-bg text-credit' : 'bg-[#f3f4f6] text-muted'
-      }`}
-    >
-      {status}
-    </span>
-  )
-}
-
-function ActionButtons({ onView, onDelete }: { onView: () => void; onDelete: () => void }) {
-  return (
-    <div className="inline-flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-      <button
-        type="button"
-        onClick={onView}
-        className="grid size-8 place-items-center rounded-lg border-0 bg-[#f4f5f7] text-[#6b7280] hover:bg-[#eceef2] hover:text-ink"
-        aria-label="View customer"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M2.8 12S6.5 6.5 12 6.5 21.2 12 21.2 12 17.5 17.5 12 17.5 2.8 12 2.8 12Z"
-            stroke="currentColor"
-            strokeWidth="1.7"
-          />
-          <circle cx="12" cy="12" r="2.4" stroke="currentColor" strokeWidth="1.7" />
-        </svg>
-      </button>
-      <button
-        type="button"
-        onClick={onDelete}
-        className="grid size-8 place-items-center rounded-lg border-0 bg-debit-bg text-debit hover:brightness-95"
-        aria-label="Delete customer"
-      >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M5 7h14M10 7V5h4v2M8 7v12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V7"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </button>
-    </div>
   )
 }

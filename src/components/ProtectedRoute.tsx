@@ -1,5 +1,5 @@
 import { Navigate, Outlet } from 'react-router-dom'
-import { getSession, getUserRole, homePathForRole, isAuthenticated } from '../lib/auth'
+import { clearSession, getSession, getUserRole, homePathForRole, isAuthenticated } from '../lib/auth'
 
 /** Requires login — otherwise redirect to /login */
 export function ProtectedRoute() {
@@ -25,6 +25,10 @@ export function RoleRoute({ allow }: { allow: string[] }) {
 export function PublicOnlyRoute() {
   const session = getSession()
   if (session?.token) {
+    if (session.user.role === 'User') {
+      clearSession()
+      return <Outlet />
+    }
     return <Navigate to={session.redirectTo || homePathForRole(session.user.role)} replace />
   }
   return <Outlet />

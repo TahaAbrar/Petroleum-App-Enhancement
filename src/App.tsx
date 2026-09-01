@@ -4,7 +4,6 @@ import { Toaster } from './toast'
 import LoginPage from './pages/LoginPage'
 import Dashboard from './pages/Dashboard'
 import AccountantDashboard from './pages/AccountantDashboard'
-import UserDashboard from './pages/UserDashboard'
 import CustomerDashboard from './pages/CustomerDashboard'
 
 export default function App() {
@@ -42,15 +41,6 @@ export default function App() {
           <Route path="/accountant/reports/item/:itemId" element={<AccountantDashboard />} />
           <Route path="/accountant/chart-of-accounts" element={<AccountantDashboard />} />
           <Route path="/accountant/chart-of-accounts/account/:accid" element={<AccountantDashboard />} />
-        </Route>
-
-        <Route element={<RoleRoute allow={['User']} />}>
-          <Route path="/user/dashboard" element={<UserDashboard />} />
-          <Route path="/user/transactions" element={<UserDashboard />} />
-          <Route path="/user/reports" element={<UserDashboard />} />
-          <Route path="/user/reports/item/:itemId" element={<UserDashboard />} />
-          <Route path="/user/chart-of-accounts" element={<UserDashboard />} />
-          <Route path="/user/chart-of-accounts/account/:accid" element={<UserDashboard />} />
         </Route>
 
         <Route element={<RoleRoute allow={['Customer']} />}>

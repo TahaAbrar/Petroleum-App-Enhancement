@@ -14,6 +14,10 @@ import {
   type CashbookEntry,
   type VoucherType,
 } from './cashbook'
+import { CashBookPreview } from './CashBookPreview'
+import { filterCashbookEntries } from './cashbookPrint'
+import { FALLBACK_COMPANY, loadCompany, peekCompany, type CompanyProfile } from './company'
+import { applyDateRange, DateRangeFilter } from './filters'
 import { LoadingHint } from './loading'
 import { panel } from './styles'
 
@@ -44,6 +48,10 @@ export function CashBookPage({ homePath }: Props) {
   const [creditRef, setCreditRef] = useState('')
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [company, setCompany] = useState<CompanyProfile>(() => peekCompany() ?? FALLBACK_COMPANY)
 
   const debitLocked = voucherType === 'Cash Received'
   const creditLocked = voucherType === 'Cash Payment'
@@ -104,6 +112,20 @@ export function CashBookPage({ homePath }: Props) {
       setDebitRef(cashInHand.accNo || '')
     }
   }, [cashInHand])
+
+  const visibleEntries = useMemo(
+    () => filterCashbookEntries(entries, dateFrom, dateTo),
+    [entries, dateFrom, dateTo],
+  )
+
+  async function openPreview() {
+    try {
+      setCompany(await loadCompany())
+    } catch {
+      /* keep last known company */
+    }
+    setPreviewOpen(true)
+  }
 
   const debitAccount = useMemo(
     () => accounts.find((a) => String(a.accid) === debitAccid) ?? null,
@@ -369,7 +391,8 @@ export function CashBookPage({ homePath }: Props) {
       {loading && accounts.length === 0 ? (
         <LoadingHint label="Loading cash book…" />
       ) : (
-        <section className={`${panel} overflow-visible rounded-2xl p-4 lg:p-5`} aria-label="Cash book form">
+        <>
+        <section className={`${panel} relative z-20 overflow-visible rounded-2xl p-4 lg:p-5`} aria-label="Cash book form">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3">
             <div className="flex items-center gap-2">
               <span className="grid size-9 place-items-center rounded-xl bg-fuel-soft text-[#c99700]">
@@ -480,8 +503,43 @@ export function CashBookPage({ homePath }: Props) {
               </div>
             </FormRow>
           </div>
+        </section>
+        <section className={`${panel} relative z-0 overflow-visible rounded-2xl p-4 lg:p-5`} aria-label="Web entries">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="m-0 text-[0.95rem] font-extrabold text-ink">Web entries</h2>
+              <p className="mt-0.5 mb-0 text-[0.72rem] font-medium text-muted">
+                Filter this table by date
+              </p>
+            </div>
+            <div className="relative z-10 flex flex-wrap items-center gap-2">
+              <DateRangeFilter
+                from={dateFrom}
+                to={dateTo}
+                grouped
+                onFromChange={(next) => {
+                  const range = applyDateRange('from', next, dateFrom, dateTo)
+                  setDateFrom(range.from)
+                  setDateTo(range.to)
+                }}
+                onToChange={(next) => {
+                  const range = applyDateRange('to', next, dateFrom, dateTo)
+                  setDateFrom(range.from)
+                  setDateTo(range.to)
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => void openPreview()}
+                className="inline-flex h-10 cursor-pointer items-center justify-center gap-1.5 rounded-[0.65rem] border border-line bg-white px-3.5 text-[0.84rem] font-extrabold text-ink hover:bg-[#f7f8fa]"
+              >
+                <PrintIcon />
+                Print
+              </button>
+            </div>
+          </div>
 
-          <div className="mt-5 overflow-x-auto rounded-xl border border-line">
+          <div className="overflow-x-auto rounded-xl border border-line">
             <table className="w-full min-w-[720px] border-collapse">
               <thead>
                 <tr className="bg-[#fafbfc]">
@@ -514,8 +572,17 @@ export function CashBookPage({ homePath }: Props) {
                       No web entries yet. Saved vouchers with RefNo WEB appear here.
                     </td>
                   </tr>
+                ) : visibleEntries.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={8}
+                      className="px-3 py-8 text-center text-[0.82rem] font-semibold text-muted"
+                    >
+                      No web entries in this date range.
+                    </td>
+                  </tr>
                 ) : (
-                  entries.map((row) => (
+                  visibleEntries.map((row) => (
                     <tr key={row.trid} className="hover:bg-[#fcfcfd]">
                       <Td>{row.vno}</Td>
                       <Td>{row.accNo}</Td>
@@ -532,7 +599,17 @@ export function CashBookPage({ homePath }: Props) {
             </table>
           </div>
         </section>
+        </>
       )}
+
+      <CashBookPreview
+        open={previewOpen}
+        entries={visibleEntries}
+        company={company}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onClose={() => setPreviewOpen(false)}
+      />
     </div>
   )
 }
@@ -614,7 +691,7 @@ function MenuSelect({
   }, [open])
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className={`relative ${open ? 'z-50' : ''}`}>
       <button
         type="button"
         data-cb-field={fieldId}
@@ -713,7 +790,7 @@ function RefSelect({
   }, [open, disabled])
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className={`relative ${open && !disabled ? 'z-50' : ''}`}>
       <button
         type="button"
         data-cb-field={fieldId}
@@ -839,7 +916,7 @@ function AccountSelect({
   }, [open, disabled])
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className={`relative ${open && !disabled ? 'z-50' : ''}`}>
       <button
         type="button"
         data-cb-field={fieldId}
@@ -933,6 +1010,21 @@ function CashIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <rect x="3.5" y="5" width="17" height="14" rx="2" stroke="currentColor" strokeWidth="1.7" />
       <path d="M3.5 9h17M8 13h3M8 16h5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function PrintIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M7 8V5.5A1.5 1.5 0 0 1 8.5 4h7A1.5 1.5 0 0 1 17 5.5V8"
+        stroke="currentColor"
+        strokeWidth="1.7"
+      />
+      <rect x="5" y="8" width="14" height="8" rx="1.6" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M8 16v4h8v-4" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M8 12h.01" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
     </svg>
   )
 }
