@@ -279,30 +279,32 @@ export function CustomerPortalHome({ txPath, groupsPath = '/customer/groups' }: 
         )}
       </section>
 
-      <section className="flex flex-col gap-2.5" aria-label="Fuel summary">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <section className="relative z-30 flex flex-col gap-2.5 overflow-visible" aria-label="Fuel summary">
+        <div className="relative z-40 flex flex-col gap-2 overflow-visible sm:flex-row sm:items-center sm:justify-between">
           <h3 className="m-0 text-[1rem] font-extrabold text-ink">Summary</h3>
-          <DateRangeFilter
-            variant="pill"
-            grouped
-            from={dateFrom}
-            to={dateTo}
-            onFromChange={(next) => {
-              const range = applyDateRange('from', next, dateFrom, dateTo)
-              setDateFrom(range.from)
-              setDateTo(range.to)
-            }}
-            onToChange={(next) => {
-              const range = applyDateRange('to', next, dateFrom, dateTo)
-              setDateFrom(range.from)
-              setDateTo(range.to)
-            }}
-          />
+          <div className="relative z-40 shrink-0 overflow-visible">
+            <DateRangeFilter
+              variant="pill"
+              grouped
+              from={dateFrom}
+              to={dateTo}
+              onFromChange={(next) => {
+                const range = applyDateRange('from', next, dateFrom, dateTo)
+                setDateFrom(range.from)
+                setDateTo(range.to)
+              }}
+              onToChange={(next) => {
+                const range = applyDateRange('to', next, dateFrom, dateTo)
+                setDateFrom(range.from)
+                setDateTo(range.to)
+              }}
+            />
+          </div>
         </div>
         <FuelSummaryStrip summary={summary} loading={summaryLoading} />
       </section>
 
-      <section aria-label="Recent transactions">
+      <section className="relative z-0" aria-label="Recent transactions">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h3 className="m-0 text-[1rem] font-extrabold text-ink">Recent Transactions</h3>
           <button

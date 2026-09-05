@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type
 import { Link, useNavigate } from 'react-router-dom'
 import { getUserRole } from '../lib/auth'
 import { toast } from '../toast'
-import { applyDateRange, MenuFilter, SearchableCustomerFilter } from './filters'
+import { applyDateRange, DateRangeFilter, MenuFilter, SearchableCustomerFilter } from './filters'
 import { LoadingHint } from './loading'
 import { PkrValue } from './customerDetails/ui'
 import {
@@ -10,6 +10,7 @@ import {
   loadTransactionsPage,
   peekTransactionCustomers,
   peekTransactions,
+  clearPageCache,
   TX_CHUNK,
   TX_PAGE_SIZE,
 } from './pageCache'
@@ -17,9 +18,11 @@ import { panel } from './styles'
 import {
   EMPTY_TX_SUMMARY,
   buildTransactionDisplayRows,
+  deleteTransaction,
   formatTxDate,
   groupByVoucher,
   ledgerAmount,
+  realDeleteTrid,
   type TransactionCustomer,
   type TransactionListParams,
   type TransactionRow,
@@ -51,6 +54,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
   const navigate = useNavigate()
   const role = getUserRole()
   const canViewCustomer = role === 'Administrator' || role === 'Accountant'
+  const canDelete = role === 'Administrator'
   const customersPath = role === 'Accountant' ? '/accountant/customers' : '/customers'
 
   const [draft, setDraft] = useState<DraftFilters>(EMPTY_DRAFT)
@@ -80,6 +84,9 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
   const [visible, setVisible] = useState(() => Math.min(TX_CHUNK, seeded?.rows.length ?? 0))
   const [loading, setLoading] = useState(() => !seeded)
   const [deleteRow, setDeleteRow] = useState<TransactionRow | null>(null)
+  const [deleteStep, setDeleteStep] = useState<'confirm' | 'password'>('confirm')
+  const [adminPassword, setAdminPassword] = useState('')
+  const [deleting, setDeleting] = useState(false)
   const fetchedRef = useRef(fetched)
   const afterFiveMobileRef = useRef<HTMLLIElement | null>(null)
   const afterFiveDesktopRef = useRef<HTMLTableRowElement | null>(null)
@@ -157,6 +164,58 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
   const totalPages = Math.max(1, Math.ceil(total / TX_PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
 
+  const closeDeleteModal = useCallback(() => {
+    if (deleting) return
+    setDeleteRow(null)
+    setDeleteStep('confirm')
+    setAdminPassword('')
+  }, [deleting])
+
+  const requestDelete = useCallback((row: TransactionRow) => {
+    setDeleteRow(row)
+    setDeleteStep('confirm')
+    setAdminPassword('')
+  }, [])
+
+  const openPasswordStep = useCallback(() => {
+    if (!deleteRow || deleting) return
+    setAdminPassword('')
+    setDeleteStep('password')
+  }, [deleteRow, deleting])
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteRow || deleting) return
+    const password = adminPassword.trim()
+    if (!password) {
+      toast.error('Enter admin password')
+      return
+    }
+    const group = voucherGroups.find((g) => g.rows.some((r) => r.trid === deleteRow.trid))
+    const trid = realDeleteTrid(deleteRow, group?.rows ?? displayRows)
+    if (!trid) {
+      toast.error('Could not resolve this transaction for delete')
+      return
+    }
+    setDeleting(true)
+    try {
+      const result = await deleteTransaction(trid, password)
+      clearPageCache()
+      setDeleteRow(null)
+      setDeleteStep('confirm')
+      setAdminPassword('')
+      toast.success(result.message || 'Debit and Credit entries deleted')
+      const data = await loadTransactionsPage(params, page, { force: true })
+      setFetched(data.rows)
+      setTotal(data.total)
+      setSummary(data.summary)
+      setVisible(Math.min(TX_CHUNK, data.rows.length))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not delete transaction')
+    } finally {
+      setDeleting(false)
+    }
+  }, [deleteRow, deleting, adminPassword, voucherGroups, displayRows, params, page])
+
   const revealMore = useCallback(() => {
     setVisible((v) => Math.min(v + TX_CHUNK, fetchedRef.current.length || v + TX_CHUNK))
   }, [])
@@ -225,11 +284,11 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
       </div>
 
       <section
-        className={`${panel} relative z-10 overflow-visible rounded-2xl p-4 lg:p-5`}
+        className={`${panel} relative z-30 overflow-visible rounded-2xl p-4 lg:p-5`}
         aria-label="Filters"
       >
-        <div className="grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2 xl:grid-cols-[1.2fr_1.4fr_1fr]">
-          <label className="relative z-10 flex min-w-0 flex-col gap-1.5 overflow-visible">
+        <div className="relative z-30 grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2 xl:grid-cols-[1.2fr_1.4fr_1fr]">
+          <label className="flex min-w-0 flex-col gap-1.5 overflow-visible">
             <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">Customer</span>
             <SearchableCustomerFilter
               value={draft.accid}
@@ -238,40 +297,25 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
             />
           </label>
 
-          <label className="flex min-w-0 flex-col gap-1.5">
+          <label className="flex min-w-0 flex-col gap-1.5 overflow-visible">
             <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">Date Range</span>
-            <div
-              className="flex w-full items-center gap-1.5"
-              role="group"
-              aria-label="Filter by date range"
-            >
-              <input
-                type="date"
-                value={draft.dateFrom}
-                onChange={(e) => {
-                  const range = applyDateRange('from', e.target.value, draft.dateFrom, draft.dateTo)
-                  setDraft((current) => ({ ...current, dateFrom: range.from, dateTo: range.to }))
-                }}
-                className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-[#fafbfc] px-3 text-[0.82rem] font-medium text-ink outline-none focus:border-fuel sm:h-11"
-                aria-label="From date"
-              />
-              <span className="hidden text-[0.75rem] font-semibold text-muted sm:inline" aria-hidden="true">
-                –
-              </span>
-              <input
-                type="date"
-                value={draft.dateTo}
-                onChange={(e) => {
-                  const range = applyDateRange('to', e.target.value, draft.dateFrom, draft.dateTo)
-                  setDraft((current) => ({ ...current, dateFrom: range.from, dateTo: range.to }))
-                }}
-                className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-[#fafbfc] px-3 text-[0.82rem] font-medium text-ink outline-none focus:border-fuel sm:h-11"
-                aria-label="To date"
-              />
-            </div>
+            <DateRangeFilter
+              grouped
+              fullWidth
+              from={draft.dateFrom}
+              to={draft.dateTo}
+              onFromChange={(next) => {
+                const range = applyDateRange('from', next, draft.dateFrom, draft.dateTo)
+                setDraft((current) => ({ ...current, dateFrom: range.from, dateTo: range.to }))
+              }}
+              onToChange={(next) => {
+                const range = applyDateRange('to', next, draft.dateFrom, draft.dateTo)
+                setDraft((current) => ({ ...current, dateFrom: range.from, dateTo: range.to }))
+              }}
+            />
           </label>
 
-          <label className="relative z-10 flex min-w-0 flex-col gap-1.5 overflow-visible">
+          <label className="flex min-w-0 flex-col gap-1.5 overflow-visible">
             <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">
               Transaction Type
             </span>
@@ -297,7 +341,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
         </div>
       </section>
 
-      <section className="lg:hidden" aria-label="Summary">
+      <section className="relative z-0 lg:hidden" aria-label="Summary">
         <h2 className="mb-2.5 text-[1rem] font-extrabold tracking-[-0.01em] text-ink">Summary</h2>
         <div className="grid grid-cols-2 gap-2.5">
           <SummaryMobile
@@ -330,7 +374,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
         </div>
       </section>
 
-      <section className="hidden grid-cols-4 gap-4 lg:grid" aria-label="Summary">
+      <section className="relative z-0 hidden grid-cols-4 gap-4 lg:grid" aria-label="Summary">
         <SummaryDesktop
           label="Total Transactions"
           value={summary.totalTransactions.toLocaleString('en-US')}
@@ -384,8 +428,9 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
                       : undefined
                   }
                   canView={canViewCustomer}
+                  canDelete={canDelete}
                   onView={openCustomer}
-                  onDelete={setDeleteRow}
+                  onDelete={requestDelete}
                 />
               ))}
               <div ref={mobileSentinelRef} className="h-4 shrink-0" />
@@ -396,11 +441,11 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
                 <colgroup>
                   <col className="w-[11%]" />
                   <col className="w-[8%]" />
-                  <col className="w-[26%]" />
+                  <col className={canDelete ? 'w-[26%]' : 'w-[30%]'} />
                   <col className="w-[12%]" />
                   <col className="w-[16%]" />
                   <col className="w-[16%]" />
-                  <col className="w-[11%]" />
+                  {canDelete ? <col className="w-[11%]" /> : null}
                 </colgroup>
                 <thead>
                   <tr>
@@ -410,7 +455,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
                     <Th>Type</Th>
                     <Th className="text-right">Debit</Th>
                     <Th className="text-right">Credit</Th>
-                    <Th className="text-center">Action</Th>
+                    {canDelete ? <Th className="text-center">Action</Th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -455,16 +500,18 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
                         <Td className={`text-right font-bold ${row.credit > 0 ? 'text-credit' : ''}`}>
                           {ledgerAmount(row.credit)}
                         </Td>
-                        <Td className="text-center">
-                          <button
-                            type="button"
-                            onClick={() => setDeleteRow(row)}
-                            className="inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border-0 bg-debit-bg text-debit hover:brightness-95"
-                            aria-label="Delete transaction"
-                          >
-                            <DeleteIcon />
-                          </button>
-                        </Td>
+                        {canDelete ? (
+                          <Td className="text-center">
+                            <button
+                              type="button"
+                              onClick={() => requestDelete(row)}
+                              className="inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border-0 bg-debit-bg text-debit hover:brightness-95"
+                              aria-label="Delete transaction"
+                            >
+                              <DeleteIcon />
+                            </button>
+                          </Td>
+                        ) : null}
                       </tr>
                     )),
                   )}
@@ -517,40 +564,107 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
             type="button"
             className="absolute inset-0 border-0 bg-ink/45 backdrop-blur-[2px]"
             aria-label="Close delete confirmation"
-            onClick={() => setDeleteRow(null)}
+            disabled={deleting}
+            onClick={closeDeleteModal}
           />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="tx-delete-title"
-            className="relative z-10 w-full max-w-[22rem] rounded-2xl border border-line bg-white p-5 shadow-[0_20px_50px_rgba(26,29,33,0.2)] animate-rise"
-          >
-            <h2
-              id="tx-delete-title"
-              className="m-0 text-[1.1rem] font-extrabold tracking-[-0.02em] text-ink"
+          {deleteStep === 'confirm' ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="tx-delete-title"
+              className="relative z-10 w-full max-w-[22rem] rounded-2xl border border-line bg-white p-5 shadow-[0_20px_50px_rgba(26,29,33,0.2)] animate-rise"
             >
-              Delete Confirmation
-            </h2>
-            <p className="mt-2 mb-0 text-[0.88rem] font-medium leading-relaxed text-muted">
-              Are you sure you want to delete this transaction?
-            </p>
-            <div className="mt-5 flex items-center justify-end gap-2.5">
-              <button
-                type="button"
-                onClick={() => setDeleteRow(null)}
-                className="cursor-pointer rounded-xl border border-line bg-white px-4 py-2.5 text-[0.85rem] font-bold text-ink hover:bg-[#f7f8fa]"
+              <h2
+                id="tx-delete-title"
+                className="m-0 text-[1.1rem] font-extrabold tracking-[-0.02em] text-ink"
               >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => setDeleteRow(null)}
-                className="cursor-pointer rounded-xl border-0 bg-[#e11d48] px-4 py-2.5 text-[0.85rem] font-bold text-white shadow-[0_6px_14px_rgba(225,29,72,0.28)] hover:brightness-95"
-              >
-                Delete
-              </button>
+                Delete Confirmation
+              </h2>
+              <p className="mt-2 mb-0 text-[0.88rem] font-medium leading-relaxed text-muted">
+                This will permanently delete both the Debit and Credit entries for this voucher.
+                Continue?
+              </p>
+              <div className="mt-5 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={closeDeleteModal}
+                  className="cursor-pointer rounded-xl border border-line bg-white px-4 py-2.5 text-[0.85rem] font-bold text-ink hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={openPasswordStep}
+                  className="cursor-pointer rounded-xl border-0 bg-[#e11d48] px-4 py-2.5 text-[0.85rem] font-bold text-white shadow-[0_6px_14px_rgba(225,29,72,0.28)] hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="tx-admin-pass-title"
+              className="relative z-10 w-full max-w-[22rem] rounded-2xl border border-line bg-white p-5 shadow-[0_20px_50px_rgba(26,29,33,0.2)] animate-rise"
+            >
+              <h2
+                id="tx-admin-pass-title"
+                className="m-0 text-[1.1rem] font-extrabold tracking-[-0.02em] text-ink"
+              >
+                Admin Password
+              </h2>
+              <p className="mt-2 mb-0 text-[0.88rem] font-medium leading-relaxed text-muted">
+                Enter the administrator password to permanently delete this voucher. Wrong password
+                will not delete any data.
+              </p>
+              <label className="mt-4 block">
+                <span className="mb-1.5 block text-[0.75rem] font-bold uppercase tracking-[0.04em] text-muted">
+                  Password
+                </span>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  autoFocus
+                  value={adminPassword}
+                  disabled={deleting}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      void confirmDelete()
+                    }
+                  }}
+                  className="box-border w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-[0.9rem] font-medium text-ink outline-none focus:border-fuel disabled:opacity-60"
+                  placeholder="Admin password"
+                />
+              </label>
+              <div className="mt-5 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={() => {
+                    if (deleting) return
+                    setDeleteStep('confirm')
+                    setAdminPassword('')
+                  }}
+                  className="cursor-pointer rounded-xl border border-line bg-white px-4 py-2.5 text-[0.85rem] font-bold text-ink hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  disabled={deleting || !adminPassword.trim()}
+                  onClick={() => void confirmDelete()}
+                  className="cursor-pointer rounded-xl border-0 bg-[#e11d48] px-4 py-2.5 text-[0.85rem] font-bold text-white shadow-[0_6px_14px_rgba(225,29,72,0.28)] hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {deleting ? 'Deleting…' : 'Confirm Delete'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       ) : null}
     </div>
@@ -561,12 +675,14 @@ function MobileVoucherCard({
   group,
   cardRef,
   canView,
+  canDelete,
   onView,
   onDelete,
 }: {
   group: { key: string; rows: TransactionRow[] }
   cardRef?: Ref<HTMLLIElement>
   canView: boolean
+  canDelete: boolean
   onView: (row: TransactionRow) => void
   onDelete: (row: TransactionRow) => void
 }) {
@@ -603,16 +719,18 @@ function MobileVoucherCard({
                 </p>
               </div>
             </div>
-            <div className="mt-2 flex justify-end">
-              <button
-                type="button"
-                onClick={() => onDelete(row)}
-                className="inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border-0 bg-debit-bg text-debit hover:brightness-95"
-                aria-label="Delete transaction"
-              >
-                <DeleteIcon />
-              </button>
-            </div>
+            {canDelete ? (
+              <div className="mt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => onDelete(row)}
+                  className="inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border-0 bg-debit-bg text-debit hover:brightness-95"
+                  aria-label="Delete transaction"
+                >
+                  <DeleteIcon />
+                </button>
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>

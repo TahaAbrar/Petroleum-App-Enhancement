@@ -1,11 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { getUserRole } from '../lib/auth'
 import { LoadingHint } from './loading'
 import {
   fetchStockStatement,
   formatLastRate,
   formatStockQty,
   formatStockValue,
+  updateStockSaleRate,
   type StockStatementRow,
 } from './reports'
 import { StockLedgerPage } from './StockLedgerPage'
@@ -32,9 +34,13 @@ export function ReportsPage({ homePath, stockPath }: Props) {
 
 function StockStatementBrowse({ homePath, stockPath }: Props) {
   const navigate = useNavigate()
+  const canEdit = getUserRole() === 'Administrator'
   const [items, setItems] = useState<StockStatementRow[]>([])
   const [totalStockValue, setTotalStockValue] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [editRow, setEditRow] = useState<StockStatementRow | null>(null)
+  const [saleRateInput, setSaleRateInput] = useState('')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     const ac = new AbortController()
@@ -57,6 +63,40 @@ function StockStatementBrowse({ homePath, stockPath }: Props) {
 
   function openItem(itemId: number) {
     navigate(`${stockPath}/item/${itemId}`)
+  }
+
+  function openEdit(row: StockStatementRow) {
+    setEditRow(row)
+    setSaleRateInput(String(row.saleRate))
+  }
+
+  function closeEdit() {
+    if (saving) return
+    setEditRow(null)
+  }
+
+  async function saveSaleRate() {
+    if (!editRow) return
+    const saleRate = Number(saleRateInput)
+    if (!Number.isFinite(saleRate) || saleRate < 0) {
+      toast.error('Enter a valid sale rate')
+      return
+    }
+    setSaving(true)
+    try {
+      const data = await updateStockSaleRate(editRow.itemId, saleRate)
+      setItems((prev) =>
+        prev.map((row) =>
+          row.itemId === editRow.itemId ? { ...row, saleRate: data.item.saleRate } : row,
+        ),
+      )
+      toast.success(data.message || 'Sale rate updated')
+      setEditRow(null)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update sale rate')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -87,16 +127,16 @@ function StockStatementBrowse({ homePath, stockPath }: Props) {
               <ul className="m-0 flex list-none flex-col p-0 lg:hidden">
                 {items.map((row) => (
                   <li key={row.itemId} className="border-b border-[#ECEEF2] py-3.5 last:border-b-0">
-                    <button
-                      type="button"
-                      onClick={() => openItem(row.itemId)}
-                      className="flex w-full cursor-pointer items-start justify-between gap-2 border-0 bg-transparent p-0 text-left"
-                    >
-                      <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openItem(row.itemId)}
+                        className="min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left"
+                      >
                         <p className="m-0 text-[0.88rem] font-extrabold text-ink">
                           {row.itemId} {row.itemName}
                         </p>
-                        <dl className="mt-2 mb-0 grid grid-cols-3 gap-2">
+                        <dl className="mt-2 mb-0 grid grid-cols-2 gap-2">
                           <div>
                             <dt className="text-[0.62rem] font-bold tracking-[0.04em] text-muted uppercase">
                               Stock
@@ -113,7 +153,7 @@ function StockStatementBrowse({ homePath, stockPath }: Props) {
                               {formatLastRate(row.lastRate)}
                             </dd>
                           </div>
-                          <div className="text-right">
+                          <div>
                             <dt className="text-[0.62rem] font-bold tracking-[0.04em] text-muted uppercase">
                               Stock Value
                             </dt>
@@ -121,24 +161,48 @@ function StockStatementBrowse({ homePath, stockPath }: Props) {
                               {formatStockValue(row.stockValue)}
                             </dd>
                           </div>
+                          <div className="text-right">
+                            <dt className="text-[0.62rem] font-bold tracking-[0.04em] text-muted uppercase">
+                              Sale Rate
+                            </dt>
+                            <dd className="m-0 mt-0.5 text-[0.78rem] font-semibold tabular-nums text-ink">
+                              {formatLastRate(row.saleRate)}
+                            </dd>
+                          </div>
                         </dl>
+                      </button>
+                      <div className="mt-1 flex shrink-0 flex-col items-end gap-2">
+                        {canEdit ? (
+                          <button
+                            type="button"
+                            onClick={() => openEdit(row)}
+                            className="cursor-pointer border-0 bg-transparent p-0 text-[0.78rem] font-bold text-muted hover:text-ink"
+                          >
+                            Edit
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => openItem(row.itemId)}
+                          className="inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-[0.78rem] font-bold text-[#c99700]"
+                        >
+                          Open <ChevronRight />
+                        </button>
                       </div>
-                      <span className="mt-1 inline-flex shrink-0 items-center gap-1 text-[0.78rem] font-bold text-[#c99700]">
-                        Open <ChevronRight />
-                      </span>
-                    </button>
+                    </div>
                   </li>
                 ))}
               </ul>
 
               <div className="hidden overflow-x-auto lg:block">
-                <table className="w-full min-w-[560px] border-collapse">
+                <table className="w-full min-w-[680px] border-collapse">
                   <colgroup>
-                    <col className="w-[34%]" />
+                    <col className="w-[28%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[12%]" />
                     <col className="w-[16%]" />
-                    <col className="w-[16%]" />
-                    <col className="w-[18%]" />
-                    <col className="w-[16%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[20%]" />
                   </colgroup>
                   <thead>
                     <tr>
@@ -146,6 +210,7 @@ function StockStatementBrowse({ homePath, stockPath }: Props) {
                       <Th align="right">Stock</Th>
                       <Th align="right">Last Rate</Th>
                       <Th align="right">Stock Value</Th>
+                      <Th align="right">Sale Rate</Th>
                       <Th align="right">{''}</Th>
                     </tr>
                   </thead>
@@ -164,9 +229,24 @@ function StockStatementBrowse({ homePath, stockPath }: Props) {
                         <Td align="right" className="font-semibold text-ink">
                           {formatStockValue(row.stockValue)}
                         </Td>
+                        <Td align="right">{formatLastRate(row.saleRate)}</Td>
                         <Td align="right">
-                          <span className="inline-flex items-center gap-1 text-[0.78rem] font-bold text-[#c99700]">
-                            Open <ChevronRight />
+                          <span className="inline-flex items-center justify-end gap-3">
+                            {canEdit ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  openEdit(row)
+                                }}
+                                className="cursor-pointer border-0 bg-transparent p-0 text-[0.78rem] font-bold text-muted hover:text-ink"
+                              >
+                                Edit
+                              </button>
+                            ) : null}
+                            <span className="inline-flex items-center gap-1 text-[0.78rem] font-bold text-[#c99700]">
+                              Open <ChevronRight />
+                            </span>
                           </span>
                         </Td>
                       </tr>
@@ -182,6 +262,73 @@ function StockStatementBrowse({ homePath, stockPath }: Props) {
           )}
         </section>
       )}
+
+      {editRow ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="presentation">
+          <button
+            type="button"
+            className="absolute inset-0 border-0 bg-ink/45 backdrop-blur-[2px]"
+            aria-label="Close sale rate editor"
+            disabled={saving}
+            onClick={closeEdit}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sale-rate-title"
+            className="relative z-10 w-full max-w-[22rem] rounded-2xl border border-line bg-white p-5 shadow-[0_20px_50px_rgba(26,29,33,0.2)] animate-rise"
+          >
+            <h2
+              id="sale-rate-title"
+              className="m-0 text-[1.1rem] font-extrabold tracking-[-0.02em] text-ink"
+            >
+              Edit Sale Rate
+            </h2>
+            <p className="mt-2 mb-0 text-[0.88rem] font-medium text-muted">
+              {editRow.itemId} {editRow.itemName}
+            </p>
+            <label className="mt-4 block">
+              <span className="mb-1.5 block text-[0.75rem] font-bold uppercase tracking-[0.04em] text-muted">
+                Sale Rate
+              </span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                autoFocus
+                value={saleRateInput}
+                disabled={saving}
+                onChange={(e) => setSaleRateInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void saveSaleRate()
+                  }
+                }}
+                className="h-10 w-full rounded-[0.65rem] border border-line bg-[#fafbfc] px-3 text-[0.88rem] font-semibold tabular-nums text-ink outline-none focus:border-fuel disabled:opacity-60"
+              />
+            </label>
+            <div className="mt-5 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={closeEdit}
+                className="cursor-pointer rounded-xl border border-line bg-white px-4 py-2.5 text-[0.85rem] font-bold text-ink hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void saveSaleRate()}
+                className="cursor-pointer rounded-xl border-0 bg-fuel px-4 py-2.5 text-[0.85rem] font-extrabold text-ink shadow-[0_6px_14px_rgba(245,197,24,0.28)] hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
