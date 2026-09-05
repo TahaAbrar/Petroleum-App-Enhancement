@@ -56,6 +56,19 @@ export function CashBookPage({ homePath }: Props) {
   const debitLocked = voucherType === 'Cash Received'
   const creditLocked = voucherType === 'Cash Payment'
   const creditAboveDebit = voucherType === 'Cash Received'
+  const hideCashInHand =
+    voucherType === 'JV' ||
+    voucherType === 'Online' ||
+    voucherType === 'Cheque' ||
+    voucherType === 'Transfer'
+
+  /** Account pickers — hide Cash In Hand for JV / Online / Cheque / Transfer. */
+  const selectableAccounts = useMemo(() => {
+    if (!hideCashInHand) return accounts
+    return accounts.filter(
+      (a) => a.accid !== 1 && a.name.trim().toLowerCase() !== 'cash in hand',
+    )
+  }, [accounts, hideCashInHand])
 
   useEffect(() => {
     const ac = new AbortController()
@@ -139,7 +152,7 @@ export function CashBookPage({ homePath }: Props) {
   const refOptions = useMemo(() => {
     const seen = new Set<string>()
     const opts: { value: string; label: string }[] = []
-    for (const acc of accounts) {
+    for (const acc of selectableAccounts) {
       const ref = (acc.accNo || '').trim()
       if (!ref) continue
       const key = ref.toLowerCase()
@@ -148,7 +161,7 @@ export function CashBookPage({ homePath }: Props) {
       opts.push({ value: ref, label: ref })
     }
     return opts.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }))
-  }, [accounts])
+  }, [selectableAccounts])
 
   function selectDebit(accid: string) {
     if (debitLocked) return
@@ -325,7 +338,7 @@ export function CashBookPage({ homePath }: Props) {
           <div className="min-w-0 flex-1">
             <AccountSelect
               value={debitAccid}
-              accounts={accounts}
+              accounts={selectableAccounts}
               placeholder="Select debit account"
               ariaLabel="Debit account"
               disabled={debitLocked}
@@ -358,7 +371,7 @@ export function CashBookPage({ homePath }: Props) {
           <div className="min-w-0 flex-1">
             <AccountSelect
               value={creditAccid}
-              accounts={accounts}
+              accounts={selectableAccounts}
               placeholder="Select credit account"
               ariaLabel="Credit account"
               disabled={creditLocked}

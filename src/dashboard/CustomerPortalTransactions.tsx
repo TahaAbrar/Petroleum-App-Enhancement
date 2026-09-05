@@ -92,8 +92,11 @@ export function CustomerPortalTransactions({ homePath }: Props) {
         </button>
       </div>
 
-      <section className={`${panel} rounded-2xl p-4 lg:px-5 lg:py-4`} aria-label="Account header">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <section
+        className={`${panel} relative z-30 overflow-visible rounded-2xl p-4 lg:px-5 lg:py-4`}
+        aria-label="Account header"
+      >
+        <div className="relative z-30 flex flex-col gap-3 overflow-visible sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="m-0 text-[0.75rem] font-semibold uppercase tracking-[0.04em] text-muted">
               Account Name
@@ -105,41 +108,45 @@ export function CustomerPortalTransactions({ homePath }: Props) {
               Group: {account?.groupName || '—'}
             </p>
           </div>
-          <DateRangeFilter
-            variant="pill"
-            grouped
-            from={dateFrom}
-            to={dateTo}
-            onFromChange={(next) => {
-              const range = applyDateRange('from', next, dateFrom, dateTo)
-              setDateFrom(range.from)
-              setDateTo(range.to)
-            }}
-            onToChange={(next) => {
-              const range = applyDateRange('to', next, dateFrom, dateTo)
-              setDateFrom(range.from)
-              setDateTo(range.to)
-            }}
-          />
+          <div className="relative z-40 shrink-0 overflow-visible">
+            <DateRangeFilter
+              variant="pill"
+              grouped
+              from={dateFrom}
+              to={dateTo}
+              onFromChange={(next) => {
+                const range = applyDateRange('from', next, dateFrom, dateTo)
+                setDateFrom(range.from)
+                setDateTo(range.to)
+              }}
+              onToChange={(next) => {
+                const range = applyDateRange('to', next, dateFrom, dateTo)
+                setDateFrom(range.from)
+                setDateTo(range.to)
+              }}
+            />
+          </div>
         </div>
       </section>
 
-      <PortalTxTable
-        rows={history.rows}
-        openingBalance={history.openingBalance}
-        totalDebit={history.totalDebit}
-        totalCredit={history.totalCredit}
-        showOpening
-        showTotals
-        loading={history.loading}
-        loadingMore={history.loadingMore}
-        emptyMessage={emptyMessage}
-        afterFiveMobileRef={afterFiveMobileRef}
-        afterFiveDesktopRef={afterFiveDesktopRef}
-        mobileSentinelRef={mobileSentinelRef}
-        desktopSentinelRef={desktopSentinelRef}
-        onPrefetch={history.prefetch}
-      />
+      <div className="relative z-0">
+        <PortalTxTable
+          rows={history.rows}
+          openingBalance={history.openingBalance}
+          totalDebit={history.totalDebit}
+          totalCredit={history.totalCredit}
+          showOpening
+          showTotals
+          loading={history.loading}
+          loadingMore={history.loadingMore}
+          emptyMessage={emptyMessage}
+          afterFiveMobileRef={afterFiveMobileRef}
+          afterFiveDesktopRef={afterFiveDesktopRef}
+          mobileSentinelRef={mobileSentinelRef}
+          desktopSentinelRef={desktopSentinelRef}
+          onPrefetch={history.prefetch}
+        />
+      </div>
     </div>
   )
 }

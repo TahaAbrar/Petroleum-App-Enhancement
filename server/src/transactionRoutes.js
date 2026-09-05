@@ -1,14 +1,27 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { getPool, sql } from './db.js'
+import { safeEqualPassword } from './security.js'
 
 /**
- * Global transactions read APIs.
- * SELECT only — never INSERT / UPDATE / DELETE.
+ * Global transactions APIs.
+ * List/summary: SELECT only.
+ * Delete: parameterized DELETE (+ RecordTB audit) for Admin/Accountant.
  * Never returns AccReg.WebUser, WebPass, or Pic.
  */
 
 export const transactionRouter = Router()
+
+let cachedBizId = null
+
+async function resolveBizId(pool) {
+  if (cachedBizId != null) return cachedBizId
+  const result = await pool.request().query(`
+    SELECT TOP (1) CompanyId FROM dbo.CompanyPro ORDER BY CompanyId
+  `)
+  cachedBizId = result.recordset[0]?.CompanyId ?? 1
+  return cachedBizId
+}
 
 const optionalIsoDate = z
   .union([z.literal(''), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)])
@@ -164,6 +177,11 @@ function displayProduct(row) {
 
 /** Payment mode for transactions table — from SlipType, Description, account, Leger.Type. */
 function resolvePaymentType(row) {
+  const legerType = cleanText(row.Type)
+  if (legerType === 'Purchases') return 'Purchase'
+  if (legerType === 'Sales') return 'Sale'
+  if (legerType && legerType !== 'JV' && legerType !== 'Slip') return legerType
+
   const slipType = cleanText(row.SlipType)
   if (slipType) {
     return slipType.charAt(0).toUpperCase() + slipType.slice(1).toLowerCase()
@@ -171,7 +189,6 @@ function resolvePaymentType(row) {
 
   const desc = cleanText(row.Description).toLowerCase()
   const acc = cleanText(row.AccName).toLowerCase()
-  const legerType = cleanText(row.Type)
 
   if (/\bonline\b|1bill|jazz\s*cash|\bpos\b|card\s*pos|card machine|byco company 1bill/.test(desc)) {
     return 'Online'
@@ -184,10 +201,6 @@ function resolvePaymentType(row) {
 
   if (legerType === 'JV') return 'Transfer'
   if (legerType === 'Slip') return 'Cash'
-  if (legerType === 'Purchases' || legerType === 'DSales' || legerType === 'Adjustment') {
-    return 'Transfer'
-  }
-  if (legerType === 'Sales') return 'Cash'
 
   return legerType || '—'
 }
@@ -238,8 +251,8 @@ function voucherKeysCte() {
           )
           AND (
             @kind = N'all'
-            OR (@kind = N'credit' AND MAX(CASE WHEN ISNULL(Tx.Credit, 0) > 0 THEN 1 ELSE 0 END) = 1)
-            OR (@kind = N'debit' AND MAX(CASE WHEN ISNULL(Tx.Debit, 0) > 0 THEN 1 ELSE 0 END) = 1)
+            OR (@kind = N'credit' AND MAX(CASE WHEN ISNULL(Tx.Credit, 0) > 0 AND Tx.Accid <> 1 THEN 1 ELSE 0 END) = 1)
+            OR (@kind = N'debit' AND MAX(CASE WHEN ISNULL(Tx.Debit, 0) > 0 AND Tx.Accid <> 1 THEN 1 ELSE 0 END) = 1)
           )
           AND (
             @q = N''
@@ -279,6 +292,267 @@ function dbFail(res, err) {
   })
 }
 
+const deleteBodySchema = z.object({
+  trid: z.coerce.number().int().positive().max(2_147_483_647),
+  password: z.string().min(1, 'Password is required').max(128),
+})
+
+/** Verify against Administrator account password (UserReg). Wrong password → no delete. */
+async function verifyAdminPassword(pool, password) {
+  const result = await pool.request().query(`
+    SELECT TOP (1) UserPass
+    FROM dbo.UserReg
+    WHERE LTRIM(RTRIM(Type)) IN (N'Administrator', N'Admin')
+    ORDER BY UserId
+  `)
+  const admin = result.recordset[0]
+  if (!admin) return false
+  return safeEqualPassword(password, admin.UserPass ?? '')
+}
+
+async function tryQuery(label, run) {
+  try {
+    await run()
+  } catch (err) {
+    console.warn(`[transactions] optional ${label} skipped:`, err.message)
+  }
+}
+
+/**
+ * Resolve all VNos to delete: source VNo + nearest opposite debit/credit leg
+ * (Slip pairs often use consecutive VNos with matching amounts).
+ */
+async function resolveDeleteVnos(pool, { trid, vno, type, dated, debit, credit, bizId }) {
+  const vnos = new Set()
+  if (vno != null && vno !== '') vnos.add(Number(vno))
+
+  const oppReq = pool
+    .request()
+    .input('trid', sql.Int, trid)
+    .input('type', sql.NVarChar(50), type)
+    .input('dated', sql.DateTime, dated)
+    .input('debit', sql.Money, debit)
+    .input('credit', sql.Money, credit)
+    .input('bizId', sql.Int, bizId)
+
+  const oppResult = await oppReq.query(`
+    SELECT TOP (1) L.VNo, L.Trid
+    FROM dbo.Leger L
+    WHERE L.Trid <> @trid
+      AND L.BizId = @bizId
+      AND L.Type = @type
+      AND CAST(L.Dated AS date) = CAST(@dated AS date)
+      AND (
+        (@debit > 0 AND ISNULL(L.Credit, 0) = @debit AND ISNULL(L.Debit, 0) = 0)
+        OR (@credit > 0 AND ISNULL(L.Debit, 0) = @credit AND ISNULL(L.Credit, 0) = 0)
+      )
+    ORDER BY ABS(L.Trid - @trid)
+  `)
+
+  const opp = oppResult.recordset[0]
+  if (opp?.VNo != null && opp.VNo !== '') vnos.add(Number(opp.VNo))
+
+  // Same-VNo siblings (Cash Book / JV dual legs) — already covered by source VNo,
+  // but collect any extra VNos sharing the voucher key with either side.
+  if (vnos.size > 0) {
+    const list = [...vnos]
+    for (const vn of list) {
+      const sib = await pool
+        .request()
+        .input('vno', sql.Int, vn)
+        .input('type', sql.NVarChar(50), type)
+        .input('dated', sql.DateTime, dated)
+        .input('bizId', sql.Int, bizId)
+        .query(`
+          SELECT DISTINCT L.VNo
+          FROM dbo.Leger L
+          WHERE L.BizId = @bizId
+            AND L.Type = @type
+            AND L.VNo = @vno
+            AND CAST(L.Dated AS date) = CAST(@dated AS date)
+        `)
+      for (const row of sib.recordset) {
+        if (row.VNo != null && row.VNo !== '') vnos.add(Number(row.VNo))
+      }
+    }
+  }
+
+  return [...vnos].filter((n) => Number.isFinite(n))
+}
+
+async function deleteLegerForVno(transaction, { vno, type, dated, bizId, useDated }) {
+  const req = new sql.Request(transaction)
+  req.input('vno', sql.Int, vno)
+  req.input('type', sql.NVarChar(50), type)
+  req.input('bizId', sql.Int, bizId)
+  if (useDated) {
+    req.input('dated', sql.DateTime, dated)
+    const result = await req.query(`
+      DELETE FROM dbo.Leger
+      WHERE VNo = @vno
+        AND Type = @type
+        AND CAST(Dated AS date) = CAST(@dated AS date)
+        AND BizId = @bizId
+    `)
+    return result.rowsAffected?.[0] ?? 0
+  }
+  const result = await req.query(`
+    DELETE FROM dbo.Leger
+    WHERE VNo = @vno
+      AND Type = @type
+      AND BizId = @bizId
+  `)
+  return result.rowsAffected?.[0] ?? 0
+}
+
+async function runSecondaryDeletes(pool, { type, vnos, dated, bizId }) {
+  for (const vno of vnos) {
+    if (type === 'JV') {
+      await tryQuery('JV', () =>
+        pool
+          .request()
+          .input('vno', sql.Int, vno)
+          .input('bizId', sql.Int, bizId)
+          .query(`DELETE FROM dbo.JV WHERE VNo = @vno AND BizId = @bizId`),
+      )
+    }
+
+    if (type === 'Slip') {
+      await tryQuery('Slip', () =>
+        pool
+          .request()
+          .input('vno', sql.Int, vno)
+          .input('dated', sql.DateTime, dated)
+          .input('bizId', sql.Int, bizId)
+          .query(`
+            DELETE FROM dbo.Slip
+            WHERE VNo = @vno
+              AND CAST(Dated AS date) = CAST(@dated AS date)
+              AND BizId = @bizId
+          `),
+      )
+      await tryQuery('SlipDet', () =>
+        pool
+          .request()
+          .input('vno', sql.Int, vno)
+          .input('dated', sql.DateTime, dated)
+          .input('bizId', sql.Int, bizId)
+          .query(`
+            DELETE FROM dbo.SlipDet
+            WHERE VNo = @vno
+              AND CAST(Dated AS date) = CAST(@dated AS date)
+              AND BizId = @bizId
+          `),
+      )
+    }
+
+    if (type === 'Purchases') {
+      await tryQuery('PR', () =>
+        pool
+          .request()
+          .input('vno', sql.Int, vno)
+          .input('dated', sql.DateTime, dated)
+          .input('bizId', sql.Int, bizId)
+          .query(`
+            DELETE FROM dbo.PR
+            WHERE VNo = @vno
+              AND CAST(Dated AS date) = CAST(@dated AS date)
+              AND BizId = @bizId
+          `),
+      )
+      await tryQuery('Stockleger Purchases', () =>
+        pool
+          .request()
+          .input('vno', sql.Int, vno)
+          .input('bizId', sql.Int, bizId)
+          .query(`
+            DELETE FROM dbo.Stockleger
+            WHERE VNo = @vno AND RefNo = N'Purchases' AND BizId = @bizId
+          `),
+      )
+    }
+
+    if (type === 'Sales') {
+      await tryQuery('Sales', () =>
+        pool
+          .request()
+          .input('vno', sql.Int, vno)
+          .input('bizId', sql.Int, bizId)
+          .query(`DELETE FROM dbo.Sales WHERE VNo = @vno AND BizId = @bizId`),
+      )
+      await tryQuery('Stockleger Sales', () =>
+        pool
+          .request()
+          .input('vno', sql.Int, vno)
+          .input('bizId', sql.Int, bizId)
+          .query(`
+            DELETE FROM dbo.Stockleger
+            WHERE VNo = @vno AND RefNo = N'Sales' AND BizId = @bizId
+          `),
+      )
+      await tryQuery('SaleDetail', () =>
+        pool
+          .request()
+          .input('vno', sql.Int, vno)
+          .input('bizId', sql.Int, bizId)
+          .query(`DELETE FROM dbo.SaleDetail WHERE VNo = @vno AND BizId = @bizId`),
+      )
+    }
+
+    if (type === 'SaleReturn') {
+      await tryQuery('SaleReturn', () =>
+        pool
+          .request()
+          .input('vno', sql.Int, vno)
+          .input('dated', sql.DateTime, dated)
+          .input('bizId', sql.Int, bizId)
+          .query(`
+            DELETE FROM dbo.SaleReturn
+            WHERE VNo = @vno
+              AND CAST(Dated AS date) = CAST(@dated AS date)
+              AND BizId = @bizId
+          `),
+      )
+      await tryQuery('Stockleger SaleReturn', () =>
+        pool
+          .request()
+          .input('vno', sql.Int, vno)
+          .input('bizId', sql.Int, bizId)
+          .query(`
+            DELETE FROM dbo.Stockleger
+            WHERE VNo = @vno AND RefNo = N'SaleReturn' AND BizId = @bizId
+          `),
+      )
+    }
+
+    if (type === 'PurchaseReturn') {
+      await tryQuery('PurchaseReturn', () =>
+        pool
+          .request()
+          .input('vno', sql.Int, vno)
+          .input('dated', sql.DateTime, dated)
+          .input('bizId', sql.Int, bizId)
+          .query(`
+            DELETE FROM dbo.PurchaseReturn
+            WHERE VNo = @vno
+              AND CAST(Dated AS date) = CAST(@dated AS date)
+              AND BizId = @bizId
+          `),
+      )
+      await tryQuery('Stockleger PurchaseReturn', () =>
+        pool
+          .request()
+          .input('vno', sql.Int, vno)
+          .input('bizId', sql.Int, bizId)
+          .query(`
+            DELETE FROM dbo.Stockleger
+            WHERE VNo = @vno AND RefNo = N'PurchaseReturn' AND BizId = @bizId
+          `),
+      )
+    }
+  }
+}
+
 const STATUS_SQL = `(L.Status IS NULL OR L.Status = N'Posted')`
 
 function filterSql(alias) {
@@ -296,8 +570,8 @@ function filterSql(alias) {
       AND (@hasTo = 0 OR CAST(${dated} AS date) <= @dateTo)
       AND (
         @kind = N'all'
-        OR (@kind = N'credit' AND ISNULL(${credit}, 0) > 0)
-        OR (@kind = N'debit' AND ISNULL(${debit}, 0) > 0)
+        OR (@kind = N'credit' AND ISNULL(${credit}, 0) > 0 AND ${accid} <> 1)
+        OR (@kind = N'debit' AND ISNULL(${debit}, 0) > 0 AND ${accid} <> 1)
       )
       AND (
         @q = N''
@@ -338,8 +612,8 @@ transactionRouter.get('/stats', async (req, res) => {
   const amountCol = kind === 'credit' ? 'Credit' : 'Debit'
   const kindFilter =
     kind === 'credit'
-      ? 'AND ISNULL(L.Credit, 0) > 0'
-      : 'AND ISNULL(L.Debit, 0) > 0'
+      ? 'AND ISNULL(L.Credit, 0) > 0 AND L.Accid <> 1'
+      : 'AND ISNULL(L.Debit, 0) > 0 AND L.Accid <> 1'
 
   try {
     const pool = await getPool()
@@ -542,6 +816,11 @@ transactionRouter.get('/', async (req, res) => {
       INNER JOIN PagedVouchers pv
         ON Tx.Dated = pv.Dated AND Tx.VNo = pv.VNo AND Tx.Type = pv.Type
       LEFT JOIN dbo.UserReg U ON U.UserId = Tx.UserId
+      WHERE (
+        @kind = N'all'
+        OR (@kind = N'credit' AND ISNULL(Tx.Credit, 0) > 0 AND Tx.Accid <> 1)
+        OR (@kind = N'debit' AND ISNULL(Tx.Debit, 0) > 0 AND Tx.Accid <> 1)
+      )
       ORDER BY
         pv.VoucherRn,
         CASE
@@ -566,6 +845,174 @@ transactionRouter.get('/', async (req, res) => {
         netFlow: totalCredit - totalDebit,
       },
       transactions,
+    })
+  } catch (err) {
+    return dbFail(res, err)
+  }
+})
+
+/**
+ * Delete a voucher: debit + credit pair (and type-specific related tables).
+ * Body: { trid, password } — admin password required; wrong password blocks delete.
+ */
+transactionRouter.post('/delete', async (req, res) => {
+  const parsed = deleteBodySchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({
+      ok: false,
+      message: parsed.error.issues[0]?.message || 'Invalid request',
+    })
+  }
+
+  const { trid, password } = parsed.data
+  const userId = Number(req.user?.id)
+  if (!Number.isFinite(userId) || userId <= 0) {
+    return res.status(401).json({ ok: false, message: 'Unauthorized' })
+  }
+
+  // Only Administrator may delete — Accountant (e.g. Arsalan) is blocked
+  if (req.user?.role !== 'Administrator') {
+    return res.status(403).json({
+      ok: false,
+      message: 'Only Administrator can delete transactions',
+    })
+  }
+
+  try {
+    const pool = await getPool()
+
+    const adminOk = await verifyAdminPassword(pool, password)
+    if (!adminOk) {
+      return res.status(403).json({ ok: false, message: 'Incorrect admin password' })
+    }
+
+    const bizId = await resolveBizId(pool)
+
+    const sourceResult = await pool
+      .request()
+      .input('trid', sql.Int, trid)
+      .input('bizId', sql.Int, bizId)
+      .query(`
+        SELECT
+          L.Trid,
+          L.VNo,
+          L.Type,
+          L.Dated,
+          ISNULL(L.Debit, 0) AS Debit,
+          ISNULL(L.Credit, 0) AS Credit,
+          L.Description,
+          L.Accid,
+          L.DNo,
+          L.RefNo
+        FROM dbo.Leger L
+        WHERE L.Trid = @trid AND L.BizId = @bizId
+      `)
+
+    const source = sourceResult.recordset[0]
+    if (!source) {
+      return res.status(404).json({ ok: false, message: 'Transaction not found' })
+    }
+
+    const type = cleanText(source.Type)
+    if (!type) {
+      return res.status(400).json({ ok: false, message: 'Transaction type missing' })
+    }
+
+    const debit = money(source.Debit)
+    const credit = money(source.Credit)
+    const dated = source.Dated instanceof Date ? source.Dated : new Date(source.Dated)
+    if (Number.isNaN(dated.getTime())) {
+      return res.status(400).json({ ok: false, message: 'Transaction date invalid' })
+    }
+
+    const vnos = await resolveDeleteVnos(pool, {
+      trid: source.Trid,
+      vno: source.VNo,
+      type,
+      dated,
+      debit,
+      credit,
+      bizId,
+    })
+
+    if (vnos.length === 0) {
+      return res.status(400).json({ ok: false, message: 'Could not resolve voucher number' })
+    }
+
+    const primaryVno = Number(source.VNo)
+    const amount = debit > 0 ? debit : credit
+    const descBits = [
+      cleanText(source.Description) || 'Transaction',
+      'Debit and Credit pair deleted',
+      type,
+      `VNo ${vnos.join(',')}`,
+    ]
+    if (source.DNo != null) descBits.push(`DNo ${source.DNo}`)
+    const auditDesc = descBits.join(' — ').slice(0, 1500)
+    const auditRef = `${type}-${Number.isFinite(primaryVno) ? primaryVno : vnos[0]}`.slice(0, 50)
+
+    await tryQuery('RecordTB', () =>
+      pool
+        .request()
+        .input('dated', sql.DateTime, new Date())
+        .input('userId', sql.Int, userId)
+        .input('refNo', sql.NVarChar(50), auditRef)
+        .input('description', sql.NVarChar(1500), auditDesc)
+        .input('debit', sql.Money, debit)
+        .input('credit', sql.Money, credit)
+        .input('timed', sql.NVarChar(50), new Date().toISOString().slice(0, 19).replace('T', ' '))
+        .input('bizId', sql.Int, bizId)
+        .query(`
+          INSERT INTO dbo.RecordTB (Dated, UserId, RefNo, Description, Debit, Credit, Timed, BizId)
+          VALUES (
+            CAST(@dated AS date),
+            @userId,
+            @refNo,
+            @description,
+            @debit,
+            @credit,
+            @timed,
+            @bizId
+          )
+        `),
+    )
+
+    const useDated = !['Purchases', 'Sales', 'SaleReturn', 'PurchaseReturn'].includes(type)
+    const transaction = new sql.Transaction(pool)
+    await transaction.begin()
+    let deletedLegs = 0
+    try {
+      for (const vno of vnos) {
+        deletedLegs += await deleteLegerForVno(transaction, {
+          vno,
+          type,
+          dated,
+          bizId,
+          useDated,
+        })
+      }
+      await transaction.commit()
+    } catch (err) {
+      try {
+        await transaction.rollback()
+      } catch {
+        /* ignore */
+      }
+      throw err
+    }
+
+    await runSecondaryDeletes(pool, { type, vnos, dated, bizId })
+
+    const vnoLabel = vnos.length === 1 ? String(vnos[0]) : vnos.join(', ')
+    const message = `Debit and Credit entries deleted for V.No ${vnoLabel} (${type}).`
+
+    return res.json({
+      ok: true,
+      deletedLegs,
+      type,
+      vnos,
+      amount,
+      message,
     })
   } catch (err) {
     return dbFail(res, err)

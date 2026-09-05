@@ -254,6 +254,18 @@ cashbookRouter.post('/entries', async (req, res) => {
   if (voucherType === 'Cash Received' && debitAccid !== 1) {
     return res.status(400).json({ ok: false, message: 'Cash Received debit must be Cash In Hand' })
   }
+  if (
+    (voucherType === 'JV' ||
+      voucherType === 'Online' ||
+      voucherType === 'Cheque' ||
+      voucherType === 'Transfer') &&
+    (debitAccid === 1 || creditAccid === 1)
+  ) {
+    return res.status(400).json({
+      ok: false,
+      message: 'Cash In Hand cannot be used for JV, Online, Cheque, or Transfer',
+    })
+  }
 
   try {
     const pool = await getPool()

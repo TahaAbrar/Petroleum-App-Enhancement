@@ -3,8 +3,8 @@ import { z } from 'zod'
 import { getPool, sql } from './db.js'
 
 /**
- * Reports read APIs — Leger + AccReg aggregates.
- * SELECT only.
+ * Reports APIs — stock statement + ledger.
+ * SELECT for lists; Administrator may UPDATE ItemReg.SaleRate.
  */
 
 export const reportsRouter = Router()
@@ -226,6 +226,7 @@ reportsRouter.get('/stock-statement', async (_req, res) => {
         I.ItemName,
         ISNULL(SV.Stock, 0) AS Stock,
         ISNULL(I.PrRate, 0) AS LastRate,
+        ISNULL(I.SaleRate, 0) AS SaleRate,
         ISNULL(SV.StockValue, 0) AS StockValue
       FROM dbo.ItemReg I
       LEFT JOIN dbo.StockValue SV ON SV.ItemId = I.ItemId
@@ -237,6 +238,7 @@ reportsRouter.get('/stock-statement', async (_req, res) => {
       itemName: cleanText(row.ItemName) || '—',
       stock: money(row.Stock),
       lastRate: money(row.LastRate),
+      saleRate: money(row.SaleRate),
       stockValue: money(row.StockValue),
     }))
 
@@ -254,6 +256,60 @@ reportsRouter.get('/stock-statement', async (_req, res) => {
 
 const itemIdParamSchema = z.object({
   itemId: z.coerce.number().int().positive().max(2_147_483_647),
+})
+
+const saleRateBodySchema = z.object({
+  saleRate: z.coerce.number().finite().min(0).max(99_999_999.99),
+})
+
+reportsRouter.post('/stock-statement/:itemId/sale-rate', async (req, res) => {
+  if (req.user?.role !== 'Administrator') {
+    return res.status(403).json({
+      ok: false,
+      message: 'Only Administrator can update sale rate',
+    })
+  }
+
+  const params = itemIdParamSchema.safeParse(req.params)
+  if (!params.success) {
+    return res.status(400).json({ ok: false, message: 'Invalid item id' })
+  }
+
+  const body = saleRateBodySchema.safeParse(req.body)
+  if (!body.success) {
+    return res.status(400).json({
+      ok: false,
+      message: body.error.issues[0]?.message || 'Invalid sale rate',
+    })
+  }
+
+  const { itemId } = params.data
+  const { saleRate } = body.data
+
+  try {
+    const pool = await getPool()
+    const result = await pool
+      .request()
+      .input('itemId', sql.Int, itemId)
+      .input('saleRate', sql.Money, saleRate)
+      .query(`
+        UPDATE dbo.ItemReg
+        SET SaleRate = @saleRate
+        WHERE ItemId = @itemId
+      `)
+
+    if (!result.rowsAffected?.[0]) {
+      return res.status(404).json({ ok: false, message: 'Item not found' })
+    }
+
+    return res.json({
+      ok: true,
+      item: { itemId, saleRate },
+      message: 'Sale rate updated',
+    })
+  } catch (err) {
+    return dbFail(res, err)
+  }
 })
 
 function formatLedgerDate(dated) {
