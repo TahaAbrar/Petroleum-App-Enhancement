@@ -206,7 +206,7 @@ export function CustomersPage({ searchQuery = '' }: Props) {
 
   return (
     <>
-      <section className={`${panel} relative z-10 overflow-visible rounded-3xl p-4 lg:p-5`} aria-label="Search Account">
+      <section className={`${panel} relative z-30 overflow-visible rounded-3xl p-4 lg:p-5`} aria-label="Search Account">
         <div className="mb-4 flex flex-col gap-3.5 lg:mb-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <h1 className="m-0 text-[1.35rem] font-extrabold tracking-[-0.03em] text-ink lg:text-[1.5rem]">
@@ -216,7 +216,7 @@ export function CustomersPage({ searchQuery = '' }: Props) {
               Find and manage accounts.
             </p>
           </div>
-          <div className="relative z-10 grid grid-cols-2 gap-2 overflow-visible lg:flex lg:shrink-0 lg:flex-wrap lg:justify-end">
+          <div className="relative z-30 grid grid-cols-2 gap-2 overflow-visible lg:flex lg:shrink-0 lg:flex-wrap lg:justify-end">
             <DateRangeFilter
               from={dateFrom}
               to={dateTo}

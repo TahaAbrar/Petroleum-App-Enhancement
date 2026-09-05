@@ -1,4 +1,4 @@
-import { apiGet } from '../lib/api'
+import { apiGet, apiPost } from '../lib/api'
 
 export type TxType = 'Credit' | 'Debit'
 export type TxKind = 'all' | 'credit' | 'debit'
@@ -360,6 +360,35 @@ export async function fetchTransactionCustomers(q?: string, signal?: AbortSignal
     { signal },
   )
   return data.customers
+}
+
+export type DeleteTransactionResult = {
+  ok: true
+  deletedLegs: number
+  type: string
+  vnos: number[]
+  amount: number
+  message: string
+}
+
+/** Permanently delete debit+credit pair (and type-specific related rows). Requires admin password. */
+export async function deleteTransaction(
+  trid: number,
+  password: string,
+  signal?: AbortSignal,
+) {
+  return apiPost<DeleteTransactionResult>(
+    '/api/transactions/delete',
+    { trid, password },
+    { signal },
+  )
+}
+
+/** Prefer a real Leger Trid — synthetic Cash In Hand display rows use negative ids. */
+export function realDeleteTrid(row: TransactionRow, siblings: TransactionRow[] = []) {
+  if (row.trid > 0) return row.trid
+  const match = siblings.find((s) => s.trid > 0)
+  return match?.trid ?? 0
 }
 
 export type KindStats = {

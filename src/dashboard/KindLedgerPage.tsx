@@ -231,11 +231,11 @@ export function KindLedgerPage({ homePath, kind, title, subtitle, searchQuery = 
       </div>
 
       <section
-        className={`${panel} relative z-10 overflow-visible rounded-2xl p-4 lg:p-5`}
+        className={`${panel} relative z-30 overflow-visible rounded-2xl p-4 lg:p-5`}
         aria-label="Filters"
       >
-        <div className="grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2">
-          <label className="relative z-10 flex min-w-0 flex-col gap-1.5 overflow-visible">
+        <div className="relative z-30 grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2">
+          <label className="flex min-w-0 flex-col gap-1.5 overflow-visible">
             <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">Customer</span>
             <SearchableCustomerFilter
               value={draft.accid}
@@ -244,7 +244,7 @@ export function KindLedgerPage({ homePath, kind, title, subtitle, searchQuery = 
             />
           </label>
 
-          <label className="flex min-w-0 flex-col gap-1.5">
+          <label className="flex min-w-0 flex-col gap-1.5 overflow-visible">
             <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">Date Range</span>
             <DateRangeFilter
               grouped
@@ -265,7 +265,7 @@ export function KindLedgerPage({ homePath, kind, title, subtitle, searchQuery = 
       </section>
 
       <section
-        className="-mx-4 flex gap-2.5 overflow-x-auto px-4 pb-1 lg:mx-0 lg:grid lg:grid-cols-4 lg:gap-4 lg:overflow-visible lg:px-0"
+        className="relative z-0 -mx-4 flex gap-2.5 overflow-x-auto px-4 pb-1 lg:mx-0 lg:grid lg:grid-cols-4 lg:gap-4 lg:overflow-visible lg:px-0"
         aria-label={`${title} summary`}
         style={{ scrollbarWidth: 'none' }}
       >
@@ -328,8 +328,7 @@ export function KindLedgerPage({ homePath, kind, title, subtitle, searchQuery = 
                   <div className="min-w-0 flex-1">
                     <p className="m-0 truncate text-[0.9rem] font-bold text-ink">{row.customer}</p>
                     <p className="mt-0.5 mb-0 truncate text-[0.72rem] font-medium text-muted">
-                      {dateOnly(row.when)}
-                      {!isCredit ? ` · ${row.product}` : ` · ${row.reference}`}
+                      {dateOnly(row.when)} · {row.reference}
                     </p>
                   </div>
                   <p className={`m-0 shrink-0 text-right text-[0.84rem] font-extrabold ${amountTone}`}>
@@ -344,44 +343,25 @@ export function KindLedgerPage({ homePath, kind, title, subtitle, searchQuery = 
             <div className="hidden min-w-0 lg:block">
               <table className="w-full table-fixed border-collapse">
                 <colgroup>
-                  {isCredit ? (
-                    <>
-                      <col className="w-[16%]" />
-                      <col className="w-[12%]" />
-                      <col className="w-[12%]" />
-                      <col className="w-[18%]" />
-                      <col className="w-[14%]" />
-                      <col className="w-[14%]" />
-                      <col className="w-[14%]" />
-                    </>
-                  ) : (
-                    <>
-                      <col className="w-[14%]" />
-                      <col className="w-[10%]" />
-                      <col className="w-[14%]" />
-                      <col className="w-[10%]" />
-                      <col className="w-[10%]" />
-                      <col className="w-[12%]" />
-                      <col className="w-[12%]" />
-                      <col className="w-[18%]" />
-                    </>
-                  )}
+                  <col className="w-[16%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[18%]" />
+                  <col className="w-[14%]" />
+                  <col className="w-[14%]" />
+                  <col className="w-[14%]" />
                 </colgroup>
                 <thead>
                   <tr>
-                    {(isCredit
-                      ? ['Customer', 'Date', 'Amount', 'Product / Service', 'Reference', 'Balance', 'Created By']
-                      : [
-                          'Customer',
-                          'Date',
-                          'Product / Service',
-                          'Quantity',
-                          'Rate',
-                          'Amount',
-                          'Balance',
-                          'Created By',
-                        ]
-                    ).map((h) => (
+                    {[
+                      'Customer',
+                      'Date',
+                      'Amount',
+                      'Product / Service',
+                      'Reference',
+                      'Balance',
+                      'Created By',
+                    ].map((h) => (
                       <th
                         key={h}
                         className="border-b border-line px-2 py-3 text-left text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase"
@@ -406,36 +386,17 @@ export function KindLedgerPage({ homePath, kind, title, subtitle, searchQuery = 
                       <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151]">
                         {dateOnly(row.when)}
                       </td>
-                      {!isCredit ? (
-                        <>
-                          <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151]">
-                            <span className="line-clamp-2 break-words" title={row.product}>
-                              {row.product}
-                            </span>
-                          </td>
-                          <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151]">
-                            {row.quantity}
-                          </td>
-                          <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151]">
-                            {row.rate}
-                          </td>
-                        </>
-                      ) : null}
                       <td className={`border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] font-bold ${amountTone}`}>
                         <PkrCell value={row.amount} />
                       </td>
-                      {isCredit ? (
-                        <>
-                          <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151]">
-                            <span className="line-clamp-2 break-words" title={row.product}>
-                              {row.product}
-                            </span>
-                          </td>
-                          <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151]">
-                            {row.reference}
-                          </td>
-                        </>
-                      ) : null}
+                      <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151]">
+                        <span className="line-clamp-2 break-words" title={row.product}>
+                          {row.product}
+                        </span>
+                      </td>
+                      <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151]">
+                        {row.reference}
+                      </td>
                       <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] font-bold text-[#374151]">
                         <PkrCell value={row.balance} />
                       </td>
