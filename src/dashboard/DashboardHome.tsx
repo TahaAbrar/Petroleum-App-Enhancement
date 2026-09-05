@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { getUserRole } from '../lib/auth'
 import { toast } from '../toast'
 import { formatPkrAmount } from './customers'
 import { BalanceTrendChart, CreditDebitChart } from './charts'
-import { PkrValue } from './customerDetails/ui'
 import {
   EMPTY_DASHBOARD_STATS,
   fetchBalanceTrend,
@@ -14,19 +14,35 @@ import {
   type CreditDebitPoint,
   type DashboardStats,
 } from './dashboard'
-import { CustomerMark, StatIcon } from './icons'
+import { StatIcon } from './icons'
 import { LoadingHint } from './loading'
+import { MobileSearchField } from './MobileSearchField'
 import {
   EMPTY_TX_FILTERS,
   loadTransactionsPage,
   peekTransactions,
+  clearPageCache,
 } from './pageCache'
 import { panel, selectBtn } from './styles'
-import { dateOnly, type TransactionRow } from './transactions'
+import {
+  DeleteTxModal,
+  MobileVoucherCard,
+  TxLedgerRow,
+  TxTableColgroup,
+  TxTableHead,
+} from './TxListViews'
+import {
+  buildTransactionDisplayRows,
+  deleteTransaction,
+  groupByVoucher,
+  realDeleteTrid,
+  type TransactionRow,
+} from './transactions'
 
 type Props = {
   txPath: string
   searchQuery?: string
+  onSearchChange?: (value: string) => void
 }
 
 const RECENT_LIMIT = 5
@@ -37,10 +53,15 @@ const RANGE_OPTIONS: { value: ChartRange; label: string }[] = [
   { value: '6m', label: '6 Months' },
 ]
 
-export function DashboardHome({ txPath, searchQuery = '' }: Props) {
+export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Props) {
   const navigate = useNavigate()
+  const role = getUserRole()
+  const canViewCustomer = role === 'Administrator' || role === 'Accountant'
+  const canDelete = role === 'Administrator'
+  const customersPath = role === 'Accountant' ? '/accountant/customers' : '/customers'
+
   const seeded = peekTransactions(EMPTY_TX_FILTERS, 1)
-  const [rows, setRows] = useState<TransactionRow[]>(() => (seeded?.rows ?? []).slice(0, RECENT_LIMIT))
+  const [rows, setRows] = useState<TransactionRow[]>(() => seeded?.rows ?? [])
   const [loading, setLoading] = useState(() => !seeded)
   const [stats, setStats] = useState<DashboardStats>(EMPTY_DASHBOARD_STATS)
   const [statsLoading, setStatsLoading] = useState(true)
@@ -50,12 +71,16 @@ export function DashboardHome({ txPath, searchQuery = '' }: Props) {
   const [balanceTrend, setBalanceTrend] = useState<BalanceTrendPoint[]>([])
   const [trendLoading, setTrendLoading] = useState(true)
   const [rangeOpen, setRangeOpen] = useState(false)
+  const [deleteRow, setDeleteRow] = useState<TransactionRow | null>(null)
+  const [deleteStep, setDeleteStep] = useState<'confirm' | 'password'>('confirm')
+  const [adminPassword, setAdminPassword] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     const cached = peekTransactions(EMPTY_TX_FILTERS, 1)
     if (cached) {
-      setRows(cached.rows.slice(0, RECENT_LIMIT))
+      setRows(cached.rows)
       setLoading(false)
     } else {
       setLoading(true)
@@ -63,7 +88,7 @@ export function DashboardHome({ txPath, searchQuery = '' }: Props) {
     loadTransactionsPage(EMPTY_TX_FILTERS, 1, { force: true })
       .then((data) => {
         if (cancelled) return
-        setRows(data.rows.slice(0, RECENT_LIMIT))
+        setRows(data.rows)
       })
       .catch((err) => {
         if (cancelled || cached) return
@@ -140,9 +165,71 @@ export function DashboardHome({ txPath, searchQuery = '' }: Props) {
         t.id.toLowerCase().includes(q) ||
         t.customer.toLowerCase().includes(q) ||
         t.product.toLowerCase().includes(q) ||
-        t.reference.toLowerCase().includes(q),
+        t.reference.toLowerCase().includes(q) ||
+        String(t.vno).toLowerCase().includes(q) ||
+        t.paymentType.toLowerCase().includes(q),
     )
   }, [searchQuery, rows])
+
+  const displayRows = useMemo(() => buildTransactionDisplayRows(filteredTx), [filteredTx])
+  const voucherGroups = useMemo(
+    () => groupByVoucher(displayRows).slice(0, RECENT_LIMIT),
+    [displayRows],
+  )
+
+  const closeDeleteModal = useCallback(() => {
+    if (deleting) return
+    setDeleteRow(null)
+    setDeleteStep('confirm')
+    setAdminPassword('')
+  }, [deleting])
+
+  const requestDelete = useCallback((row: TransactionRow) => {
+    setDeleteRow(row)
+    setDeleteStep('confirm')
+    setAdminPassword('')
+  }, [])
+
+  const openPasswordStep = useCallback(() => {
+    if (!deleteRow || deleting) return
+    setAdminPassword('')
+    setDeleteStep('password')
+  }, [deleteRow, deleting])
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteRow || deleting) return
+    const password = adminPassword.trim()
+    if (!password) {
+      toast.error('Enter admin password')
+      return
+    }
+    const group = voucherGroups.find((g) => g.rows.some((r) => r.trid === deleteRow.trid))
+    const trid = realDeleteTrid(deleteRow, group?.rows ?? displayRows)
+    if (!trid) {
+      toast.error('Could not resolve this transaction for delete')
+      return
+    }
+    setDeleting(true)
+    try {
+      const result = await deleteTransaction(trid, password)
+      clearPageCache()
+      setDeleteRow(null)
+      setDeleteStep('confirm')
+      setAdminPassword('')
+      toast.success(result.message || 'Debit and Credit entries deleted')
+      const data = await loadTransactionsPage(EMPTY_TX_FILTERS, 1, { force: true })
+      setRows(data.rows)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not delete transaction')
+    } finally {
+      setDeleting(false)
+    }
+  }, [deleteRow, deleting, adminPassword, voucherGroups, displayRows])
+
+  function openCustomer(row: TransactionRow) {
+    if (!canViewCustomer) return
+    navigate(`${customersPath}/${row.slug}`)
+  }
 
   const statCards = [
     {
@@ -183,6 +270,14 @@ export function DashboardHome({ txPath, searchQuery = '' }: Props) {
 
   return (
     <>
+      {onSearchChange ? (
+        <MobileSearchField
+          value={searchQuery}
+          onChange={onSearchChange}
+          placeholder="Search here..."
+          ariaLabel="Search dashboard"
+        />
+      ) : null}
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-4 xl:gap-4" aria-label="Summary">
         {statCards.map((s, i) => {
           const isHalf = s.mobileSpan === 'half'
@@ -321,128 +416,67 @@ export function DashboardHome({ txPath, searchQuery = '' }: Props) {
           </button>
         </div>
 
-        {loading && filteredTx.length === 0 ? (
+        {loading && voucherGroups.length === 0 ? (
           <LoadingHint label="Loading recent transactions…" />
-        ) : filteredTx.length === 0 ? (
+        ) : voucherGroups.length === 0 ? (
           <p className="my-8 text-center text-sm font-semibold text-muted">No transactions found.</p>
         ) : (
           <>
-            <ul className="m-0 flex list-none flex-col p-0 lg:hidden">
-              {filteredTx.slice(0, RECENT_LIMIT).map((row) => {
-                const isCredit = row.type === 'Credit'
-                return (
-                  <li
-                    key={row.trid}
-                    className="flex items-center gap-2.5 border-b border-[#ECEEF2] py-3.5 last:border-b-0"
-                  >
-                    <div className="grid size-11 shrink-0 place-items-center rounded-full bg-white shadow-[0_4px_14px_rgba(26,29,33,0.1)] ring-1 ring-black/5">
-                      <CustomerMark />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="m-0 truncate text-[0.9rem] font-bold text-[#1A1D21]">{row.customer}</p>
-                      <p className="mt-0.5 m-0 truncate text-[0.75rem] font-medium text-[#8B93A1]">
-                        {row.product}
-                      </p>
-                    </div>
-                    <span
-                      className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-[0.68rem] font-bold leading-none ${
-                        isCredit ? 'bg-[#E8F8EE] text-[#16A34A]' : 'bg-[#FDE8EC] text-[#E11D48]'
-                      }`}
-                    >
-                      {row.type}
-                    </span>
-                    <p
-                      className={`m-0 shrink-0 whitespace-nowrap text-right text-[0.8rem] font-bold leading-none ${
-                        isCredit ? 'text-[#16A34A]' : 'text-[#E11D48]'
-                      }`}
-                    >
-                      <PkrValue value={row.amount} amountClass="font-bold" />
-                    </p>
-                  </li>
-                )
-              })}
+            <ul className="m-0 flex list-none flex-col gap-2.5 p-0 lg:hidden">
+              {voucherGroups.map((group) => (
+                <MobileVoucherCard
+                  key={group.key}
+                  group={group}
+                  canView={canViewCustomer}
+                  canDelete={canDelete}
+                  onView={openCustomer}
+                  onDelete={requestDelete}
+                />
+              ))}
             </ul>
 
             <div className="hidden min-w-0 lg:block">
               <table className="w-full table-fixed border-collapse">
-                <colgroup>
-                  <col className="w-[16%]" />
-                  <col className="w-[9%]" />
-                  <col className="w-[20%]" />
-                  <col className="w-[13%]" />
-                  <col className="w-[13%]" />
-                  <col className="w-[14%]" />
-                  <col className="w-[15%]" />
-                </colgroup>
-                <thead>
-                  <tr>
-                    {[
-                      'Customer',
-                      'Type',
-                      'Product / Service',
-                      'Amount',
-                      'Balance',
-                      'Date',
-                      'Created By',
-                    ].map((h) => (
-                      <th
-                        key={h}
-                        className="border-b border-line px-2 py-3 text-left text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
+                <TxTableColgroup canDelete={canDelete} />
+                <TxTableHead canDelete={canDelete} />
                 <tbody>
-                  {filteredTx.slice(0, RECENT_LIMIT).map((row) => {
-                    const isCredit = row.type === 'Credit'
-                    return (
-                      <tr key={row.trid} className="hover:bg-[#fcfcfd]">
-                        <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151]">
-                          <span className="line-clamp-2 break-words" title={row.customer}>
-                            {row.customer}
-                          </span>
-                        </td>
-                        <td className="border-b border-[#f1f2f4] px-2 py-3 align-top">
-                          <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-[0.65rem] font-bold ${
-                              isCredit ? 'bg-credit-bg text-credit' : 'bg-debit-bg text-debit'
-                            }`}
-                          >
-                            {row.type}
-                          </span>
-                        </td>
-                        <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151]">
-                          <span className="line-clamp-2 break-words" title={row.product}>
-                            {row.product}
-                          </span>
-                        </td>
-                        <td
-                          className={`border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] ${
-                            isCredit ? 'text-credit' : 'text-debit'
-                          }`}
-                        >
-                          <PkrValue value={row.amount} />
-                        </td>
-                        <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151]">
-                          <PkrValue value={row.balance} />
-                        </td>
-                        <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151]">
-                          <span className="block leading-snug break-words">{dateOnly(row.when)}</span>
-                        </td>
-                        <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151]">
-                          <span className="block break-words leading-snug">{row.by}</span>
-                        </td>
-                      </tr>
-                    )
-                  })}
+                  {voucherGroups.flatMap((group) =>
+                    group.rows.map((row, legIndex) => (
+                      <TxLedgerRow
+                        key={row.trid}
+                        row={row}
+                        legIndex={legIndex}
+                        groupSize={group.rows.length}
+                        canView={canViewCustomer}
+                        canDelete={canDelete}
+                        onView={openCustomer}
+                        onDelete={requestDelete}
+                      />
+                    )),
+                  )}
                 </tbody>
               </table>
             </div>
           </>
         )}
       </section>
+
+      {deleteRow ? (
+        <DeleteTxModal
+          step={deleteStep}
+          password={adminPassword}
+          deleting={deleting}
+          onPasswordChange={setAdminPassword}
+          onClose={closeDeleteModal}
+          onBack={() => {
+            if (deleting) return
+            setDeleteStep('confirm')
+            setAdminPassword('')
+          }}
+          onContinue={openPasswordStep}
+          onConfirm={() => void confirmDelete()}
+        />
+      ) : null}
     </>
   )
 }

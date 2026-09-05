@@ -508,11 +508,16 @@ customerRouter.get('/:accid/transactions', async (req, res) => {
     countReq.input('dateTo', sql.Date, dateTo || '1900-01-01')
     const countResult = await countReq.query(`
       ${cte}
-      SELECT COUNT(*) AS Total
+      SELECT
+        COUNT(*) AS Total,
+        SUM(ISNULL(Tx.Debit, 0)) AS TotalDebit,
+        SUM(ISNULL(Tx.Credit, 0)) AS TotalCredit
       FROM Tx
       ${filterSql}
     `)
     const total = money(countResult.recordset[0]?.Total)
+    const totalDebit = money(countResult.recordset[0]?.TotalDebit)
+    const totalCredit = money(countResult.recordset[0]?.TotalCredit)
 
     const listReq = pool.request()
     listReq.input('accid', sql.Int, accid)
@@ -558,21 +563,34 @@ customerRouter.get('/:accid/transactions', async (req, res) => {
     const transactions = listResult.recordset.map((row) => {
       const { type, amount } = mapAmount(row, kind)
       const product = productFields(row)
+      const desc = cleanText(row.Description)
       return {
         trid: row.Trid,
         id: txDisplayId(row.Type, row.VNo, row.Trid),
+        vno: row.VNo != null && row.VNo !== '' ? String(row.VNo) : '—',
         when: formatWhen(row.Dated, row.Timed),
         type,
         product: product.product,
+        description: desc || product.product || '—',
         quantity: product.quantity,
         rate: product.rate,
         amount,
+        debit: money(row.Debit),
+        credit: money(row.Credit),
         balance: money(row.RunningBalance),
         by: cleanText(row.UserName) || cleanText(row.UserType) || '—',
       }
     })
 
-    return res.json({ ok: true, total, offset, limit, transactions })
+    return res.json({
+      ok: true,
+      total,
+      totalDebit,
+      totalCredit,
+      offset,
+      limit,
+      transactions,
+    })
   } catch (err) {
     return dbFail(res, err)
   }

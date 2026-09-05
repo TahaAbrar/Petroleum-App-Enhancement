@@ -1,7 +1,8 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getUserRole } from '../lib/auth'
 import { LoadingHint } from './loading'
+import { MobileSearchField } from './MobileSearchField'
 import {
   fetchStockStatement,
   formatLastRate,
@@ -19,9 +20,15 @@ type Props = {
   stockPath: string
   txPath?: string
   searchQuery?: string
+  onSearchChange?: (value: string) => void
 }
 
-export function ReportsPage({ homePath, stockPath }: Props) {
+export function ReportsPage({
+  homePath,
+  stockPath,
+  searchQuery = '',
+  onSearchChange,
+}: Props) {
   const { itemId: itemIdParam } = useParams<{ itemId?: string }>()
   const itemId = itemIdParam ? Number(itemIdParam) : NaN
 
@@ -29,10 +36,22 @@ export function ReportsPage({ homePath, stockPath }: Props) {
     return <StockLedgerPage itemId={itemId} stockPath={stockPath} homePath={homePath} />
   }
 
-  return <StockStatementBrowse homePath={homePath} stockPath={stockPath} />
+  return (
+    <StockStatementBrowse
+      homePath={homePath}
+      stockPath={stockPath}
+      searchQuery={searchQuery}
+      onSearchChange={onSearchChange}
+    />
+  )
 }
 
-function StockStatementBrowse({ homePath, stockPath }: Props) {
+function StockStatementBrowse({
+  homePath,
+  stockPath,
+  searchQuery = '',
+  onSearchChange,
+}: Props) {
   const navigate = useNavigate()
   const canEdit = getUserRole() === 'Administrator'
   const [items, setItems] = useState<StockStatementRow[]>([])
@@ -41,6 +60,21 @@ function StockStatementBrowse({ homePath, stockPath }: Props) {
   const [editRow, setEditRow] = useState<StockStatementRow | null>(null)
   const [saleRateInput, setSaleRateInput] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const q = searchQuery.trim().toLowerCase()
+  const filteredItems = useMemo(() => {
+    if (!q) return items
+    return items.filter(
+      (row) =>
+        row.itemName.toLowerCase().includes(q) ||
+        String(row.itemId).includes(q),
+    )
+  }, [items, q])
+  const filteredTotal = useMemo(
+    () => filteredItems.reduce((sum, row) => sum + (row.stockValue || 0), 0),
+    [filteredItems],
+  )
+  const displayTotal = q ? filteredTotal : totalStockValue
 
   useEffect(() => {
     const ac = new AbortController()
@@ -116,16 +150,25 @@ function StockStatementBrowse({ homePath, stockPath }: Props) {
         </div>
       </div>
 
+      {onSearchChange ? (
+        <MobileSearchField
+          value={searchQuery}
+          onChange={onSearchChange}
+          placeholder="Search stock items..."
+          ariaLabel="Search stock items"
+        />
+      ) : null}
+
       {loading && items.length === 0 ? (
         <LoadingHint label="Loading stock statement…" />
       ) : (
         <section className={`${panel} rounded-2xl p-4 lg:p-5`} aria-label="Stock statement">
-          {items.length === 0 ? (
+          {filteredItems.length === 0 ? (
             <p className="my-6 text-center text-sm font-semibold text-muted">No stock items found.</p>
           ) : (
             <>
               <ul className="m-0 flex list-none flex-col p-0 lg:hidden">
-                {items.map((row) => (
+                {filteredItems.map((row) => (
                   <li key={row.itemId} className="border-b border-[#ECEEF2] py-3.5 last:border-b-0">
                     <div className="flex items-start justify-between gap-2">
                       <button
@@ -215,7 +258,7 @@ function StockStatementBrowse({ homePath, stockPath }: Props) {
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((row) => (
+                    {filteredItems.map((row) => (
                       <tr
                         key={row.itemId}
                         className="cursor-pointer hover:bg-[#fcfcfd]"
@@ -256,7 +299,7 @@ function StockStatementBrowse({ homePath, stockPath }: Props) {
               </div>
 
               <div className="mt-3 flex justify-end">
-                <TotalBox value={formatStockValue(totalStockValue)} />
+                <TotalBox value={formatStockValue(displayTotal)} />
               </div>
             </>
           )}

@@ -12,6 +12,7 @@ import {
   type CoaSubChart,
 } from './chartOfAccounts'
 import { LoadingHint } from './loading'
+import { MobileSearchField } from './MobileSearchField'
 import { panel } from './styles'
 
 type Level = 'charts' | 'subCharts' | 'accounts'
@@ -26,9 +27,15 @@ type Props = {
   homePath: string
   coaPath: string
   searchQuery?: string
+  onSearchChange?: (value: string) => void
 }
 
-export function ChartOfAccountsPage({ homePath, coaPath, searchQuery = '' }: Props) {
+export function ChartOfAccountsPage({
+  homePath,
+  coaPath,
+  searchQuery = '',
+  onSearchChange,
+}: Props) {
   const { accid: accidParam } = useParams<{ accid?: string }>()
   const accid = accidParam ? Number(accidParam) : NaN
 
@@ -36,10 +43,22 @@ export function ChartOfAccountsPage({ homePath, coaPath, searchQuery = '' }: Pro
     return <CoaAccountLedgerPage accid={accid} coaPath={coaPath} homePath={homePath} />
   }
 
-  return <ChartOfAccountsBrowse homePath={homePath} coaPath={coaPath} searchQuery={searchQuery} />
+  return (
+    <ChartOfAccountsBrowse
+      homePath={homePath}
+      coaPath={coaPath}
+      searchQuery={searchQuery}
+      onSearchChange={onSearchChange}
+    />
+  )
 }
 
-function ChartOfAccountsBrowse({ homePath, coaPath, searchQuery = '' }: Props) {
+function ChartOfAccountsBrowse({
+  homePath,
+  coaPath,
+  searchQuery = '',
+  onSearchChange,
+}: Props) {
   const navigate = useNavigate()
   const location = useLocation()
   const restored = (location.state as { coaBack?: CoaBackState } | null)?.coaBack
@@ -241,6 +260,15 @@ function ChartOfAccountsBrowse({ homePath, coaPath, searchQuery = '' }: Props) {
           </button>
         )}
       </div>
+
+      {onSearchChange ? (
+        <MobileSearchField
+          value={searchQuery}
+          onChange={onSearchChange}
+          placeholder="Search chart of accounts..."
+          ariaLabel="Search chart of accounts"
+        />
+      ) : null}
 
       {level === 'charts' && (
         <>

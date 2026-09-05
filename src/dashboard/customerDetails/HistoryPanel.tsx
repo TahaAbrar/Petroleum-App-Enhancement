@@ -3,8 +3,9 @@ import { type HistoryKind, type HistorySort } from '../customers'
 import { applyDateRange, DateRangeFilter } from '../filters'
 import { LoadingHint } from '../loading'
 import { panel } from '../styles'
+import { formatTxDate, ledgerAmount } from '../transactions'
 import type { CustomerHistoryState } from './useCustomerHistory'
-import { PkrCell, PkrValue, Td, TypeBadge, WhenCell } from './ui'
+import { PkrValue, Td } from './ui'
 
 const TABS = [
   ['all', 'Transaction History'],
@@ -17,17 +18,7 @@ const SORTS = [
   ['oldest', 'Oldest'],
 ] as const
 
-const COLUMNS = [
-  'ID',
-  'Date & Time',
-  'Type',
-  'Product / Service',
-  'Quantity',
-  'Rate',
-  'Amount',
-  'Balance',
-  'Created By',
-]
+const COLUMNS = ['Date', 'Description', 'V.No', 'Debit', 'Credit']
 
 type Props = {
   history: CustomerHistoryState
@@ -58,6 +49,8 @@ export function CustomerHistoryPanel({
   const afterFiveDesktopRef = useRef<HTMLTableRowElement | null>(null)
   const mobileSentinelRef = useRef<HTMLDivElement | null>(null)
   const desktopSentinelRef = useRef<HTMLDivElement | null>(null)
+  const showTotals =
+    !history.loading && (Boolean(dateFrom || dateTo) || tab === 'credit' || tab === 'debit')
 
   useEffect(() => {
     const observers: IntersectionObserver[] = []
@@ -147,24 +140,25 @@ export function CustomerHistoryPanel({
           <li
             key={row.trid}
             ref={index === 4 ? afterFiveMobileRef : undefined}
-            className="flex items-center justify-between gap-3 border-b border-[#ECEEF2] py-3 last:border-b-0"
+            className="flex flex-col gap-1.5 border-b border-[#ECEEF2] py-3 last:border-b-0"
           >
-            <div className="min-w-0">
-              <p className="m-0 text-[0.84rem] font-extrabold text-ink">{row.id}</p>
-              <p className="mt-0.5 mb-0 truncate text-[0.72rem] font-medium text-muted">
-                {row.when} · {row.product}
-              </p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="m-0 text-[0.72rem] font-semibold text-muted">
+                  {formatTxDate(row.when)} · V.No {row.vno || '—'}
+                </p>
+                <p className="mt-0.5 mb-0 text-[0.84rem] font-extrabold text-ink">
+                  {row.description || row.product || '—'}
+                </p>
+              </div>
             </div>
-            <div className="shrink-0 text-right">
-              <TypeBadge type={row.type} />
-              <p
-                className={`mt-1 mb-0 text-[0.8rem] font-extrabold ${
-                  row.type === 'Credit' ? 'text-credit' : 'text-debit'
-                }`}
-              >
-                {row.type === 'Credit' ? '+' : '-'}
-                <PkrValue value={row.amount} amountClass="font-extrabold" />
-              </p>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[0.78rem]">
+              <span className={`font-extrabold ${row.debit > 0 ? 'text-debit' : 'text-muted'}`}>
+                Dr {ledgerAmount(row.debit ?? 0)}
+              </span>
+              <span className={`font-extrabold ${row.credit > 0 ? 'text-credit' : 'text-muted'}`}>
+                Cr {ledgerAmount(row.credit ?? 0)}
+              </span>
             </div>
           </li>
         ))}
@@ -182,27 +176,42 @@ export function CustomerHistoryPanel({
             <LoadingHint compact label="Loading more…" />
           </li>
         )}
+        {showTotals ? (
+          <li className="border-t-2 border-ink/10 bg-[#f7f8fa] px-1 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[0.84rem]">
+              <span className="font-extrabold text-ink">Total</span>
+              {tab !== 'credit' ? (
+                <span className="font-extrabold text-debit">
+                  Debit <PkrValue value={history.totalDebit} amountClass="font-extrabold" />
+                </span>
+              ) : null}
+              {tab !== 'debit' ? (
+                <span className="font-extrabold text-credit">
+                  Credit <PkrValue value={history.totalCredit} amountClass="font-extrabold" />
+                </span>
+              ) : null}
+            </div>
+          </li>
+        ) : null}
       </ul>
 
       <div className="hidden min-w-0 lg:block">
         <table className="w-full table-fixed border-collapse">
           <colgroup>
-            <col className="w-[9%]" />
-            <col className="w-[13%]" />
-            <col className="w-[7%]" />
-            <col className="w-[20%]" />
-            <col className="w-[7%]" />
-            <col className="w-[7%]" />
+            <col className="w-[14%]" />
+            <col className="w-[38%]" />
             <col className="w-[12%]" />
-            <col className="w-[12%]" />
-            <col className="w-[13%]" />
+            <col className="w-[18%]" />
+            <col className="w-[18%]" />
           </colgroup>
           <thead>
             <tr>
               {COLUMNS.map((h) => (
                 <th
                   key={h}
-                  className="border-b border-line px-2 py-3 text-left text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase"
+                  className={`border-b border-line px-2 py-3 text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase ${
+                    h === 'Debit' || h === 'Credit' ? 'text-right' : 'text-left'
+                  }`}
                 >
                   {h}
                 </th>
@@ -216,53 +225,61 @@ export function CustomerHistoryPanel({
                 ref={index === 4 ? afterFiveDesktopRef : undefined}
                 className="hover:bg-[#fcfcfd]"
               >
-                <Td className="font-semibold text-ink">
-                  <span className="block truncate" title={row.id}>
-                    {row.id}
-                  </span>
-                </Td>
                 <Td>
-                  <WhenCell value={row.when} />
-                </Td>
-                <Td>
-                  <TypeBadge type={row.type} />
+                  <span className="block leading-snug break-words">{formatTxDate(row.when)}</span>
                 </Td>
                 <Td className="min-w-0">
-                  <span className="line-clamp-2 break-words" title={row.product}>
-                    {row.product}
+                  <span
+                    className="line-clamp-2 break-words"
+                    title={row.description || row.product}
+                  >
+                    {row.description || row.product || '—'}
                   </span>
                 </Td>
-                <Td>
-                  <span className="block break-words">{row.quantity}</span>
+                <Td className="font-semibold text-ink">{row.vno || '—'}</Td>
+                <Td className={`text-right font-bold ${row.debit > 0 ? 'text-debit' : ''}`}>
+                  {row.debit > 0 ? <PkrValue value={row.debit} /> : ledgerAmount(0)}
                 </Td>
-                <Td>
-                  <span className="block break-words">{row.rate}</span>
-                </Td>
-                <Td className={row.type === 'Credit' ? 'font-bold text-credit' : 'font-bold text-debit'}>
-                  <PkrCell value={row.amount} />
-                </Td>
-                <Td className="font-bold">
-                  <PkrCell value={row.balance} />
-                </Td>
-                <Td>
-                  <span className="block break-words leading-snug">{row.by}</span>
+                <Td className={`text-right font-bold ${row.credit > 0 ? 'text-credit' : ''}`}>
+                  {row.credit > 0 ? <PkrValue value={row.credit} /> : ledgerAmount(0)}
                 </Td>
               </tr>
             ))}
             {history.loading && (
               <tr>
-                <td colSpan={9}>
+                <td colSpan={5}>
                   <LoadingHint label="Loading transactions…" />
                 </td>
               </tr>
             )}
             {!history.loading && history.rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="py-10 text-center text-sm font-medium text-muted">
+                <td colSpan={5} className="py-10 text-center text-sm font-medium text-muted">
                   {emptyMessage}
                 </td>
               </tr>
             )}
+            {showTotals ? (
+              <tr className="bg-[#f7f8fa]">
+                <Td className="font-extrabold text-ink" />
+                <Td className="font-extrabold text-ink">Total</Td>
+                <Td />
+                <Td className="text-right font-extrabold text-debit">
+                  {tab === 'credit' ? (
+                    ledgerAmount(0)
+                  ) : (
+                    <PkrValue value={history.totalDebit} amountClass="font-extrabold" />
+                  )}
+                </Td>
+                <Td className="text-right font-extrabold text-credit">
+                  {tab === 'debit' ? (
+                    ledgerAmount(0)
+                  ) : (
+                    <PkrValue value={history.totalCredit} amountClass="font-extrabold" />
+                  )}
+                </Td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
         <div ref={desktopSentinelRef} className="h-4" />

@@ -418,7 +418,11 @@ export function DashboardShell({ config }: Props) {
           ) : isCustomerPortal && active === 'transactions' ? (
             <CustomerPortalTransactions homePath={homePath} />
           ) : active === 'customers' ? (
-            <CustomersPage searchQuery={query} txPath={txPath} />
+            <CustomersPage
+              searchQuery={query}
+              onSearchChange={setQuery}
+              txPath={txPath}
+            />
           ) : active === 'transactions' ? (
             <TransactionsPage homePath={homePath} searchQuery={query} />
           ) : active === 'credit' ? (
@@ -433,17 +437,23 @@ export function DashboardShell({ config }: Props) {
               stockPath={stockPath}
               txPath={txPath}
               searchQuery={query}
+              onSearchChange={setQuery}
             />
           ) : active === 'chartOfAccounts' ? (
             <ChartOfAccountsPage
               homePath={homePath}
               coaPath={coaNav?.path ?? '/chart-of-accounts'}
               searchQuery={query}
+              onSearchChange={setQuery}
             />
           ) : showSection ? (
             <SectionPlaceholder title={activeLabel} path={activePath} />
           ) : (
-            <DashboardHome txPath={txPath} searchQuery={query} />
+            <DashboardHome
+              txPath={txPath}
+              searchQuery={query}
+              onSearchChange={setQuery}
+            />
           )}
         </div>
       </div>
