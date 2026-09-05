@@ -1,10 +1,11 @@
-import { apiGet } from '../lib/api'
+import { apiGet, apiPost } from '../lib/api'
 
 export type StockStatementRow = {
   itemId: number
   itemName: string
   stock: number
   lastRate: number
+  saleRate: number
   stockValue: number
 }
 
@@ -108,5 +109,19 @@ export async function fetchStockLedger(itemId: number, signal?: AbortSignal) {
     `/api/reports/stock-statement/${itemId}`,
     { signal },
   )
+  return data
+}
+
+/** Administrator only — update ItemReg.SaleRate. */
+export async function updateStockSaleRate(
+  itemId: number,
+  saleRate: number,
+  signal?: AbortSignal,
+) {
+  const data = await apiPost<{
+    ok: true
+    item: { itemId: number; saleRate: number }
+    message: string
+  }>(`/api/reports/stock-statement/${itemId}/sale-rate`, { saleRate }, { signal })
   return data
 }

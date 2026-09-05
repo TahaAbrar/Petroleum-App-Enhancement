@@ -176,11 +176,17 @@ function pickPaymentType(...types: string[]) {
 export function resolvePaymentType(
   row: Pick<TransactionRow, 'paymentType' | 'ledgerType' | 'customer' | 'product' | 'description'>,
 ): string {
+  const legerType = row.ledgerType || ''
+  if (legerType === 'Purchases') return 'Purchase'
+  if (legerType === 'Sales') return 'Sale'
+  if (legerType && legerType !== 'JV' && legerType !== 'Slip' && legerType !== '—') {
+    return legerType
+  }
+
   if (row.paymentType && row.paymentType !== '—') return row.paymentType
 
   const desc = `${row.description || ''} ${row.product || ''}`.toLowerCase()
   const acc = (row.customer || '').toLowerCase()
-  const legerType = row.ledgerType || ''
 
   if (/\bonline\b|1bill|jazz\s*cash|\bpos\b|card\s*pos|card machine|byco company 1bill/.test(desc)) {
     return 'Online'
@@ -189,10 +195,6 @@ export function resolvePaymentType(
   if (/bank|mcb|alfalah|meezan|hbl|ubl|faysal/.test(acc)) return 'Online'
   if (legerType === 'JV') return 'Transfer'
   if (legerType === 'Slip') return 'Cash'
-  if (legerType === 'Purchases' || legerType === 'DSales' || legerType === 'Adjustment') {
-    return 'Transfer'
-  }
-  if (legerType === 'Sales') return 'Cash'
 
   return legerType || '—'
 }

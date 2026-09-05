@@ -177,6 +177,11 @@ function displayProduct(row) {
 
 /** Payment mode for transactions table — from SlipType, Description, account, Leger.Type. */
 function resolvePaymentType(row) {
+  const legerType = cleanText(row.Type)
+  if (legerType === 'Purchases') return 'Purchase'
+  if (legerType === 'Sales') return 'Sale'
+  if (legerType && legerType !== 'JV' && legerType !== 'Slip') return legerType
+
   const slipType = cleanText(row.SlipType)
   if (slipType) {
     return slipType.charAt(0).toUpperCase() + slipType.slice(1).toLowerCase()
@@ -184,7 +189,6 @@ function resolvePaymentType(row) {
 
   const desc = cleanText(row.Description).toLowerCase()
   const acc = cleanText(row.AccName).toLowerCase()
-  const legerType = cleanText(row.Type)
 
   if (/\bonline\b|1bill|jazz\s*cash|\bpos\b|card\s*pos|card machine|byco company 1bill/.test(desc)) {
     return 'Online'
@@ -197,10 +201,6 @@ function resolvePaymentType(row) {
 
   if (legerType === 'JV') return 'Transfer'
   if (legerType === 'Slip') return 'Cash'
-  if (legerType === 'Purchases' || legerType === 'DSales' || legerType === 'Adjustment') {
-    return 'Transfer'
-  }
-  if (legerType === 'Sales') return 'Cash'
 
   return legerType || '—'
 }
