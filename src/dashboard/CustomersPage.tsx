@@ -23,13 +23,15 @@ import {
   type CustomerListParams,
 } from './pageCache'
 import { panel } from './styles'
+import { MobileSearchField } from './MobileSearchField'
 
 type Props = {
   searchQuery?: string
+  onSearchChange?: (value: string) => void
   txPath: string
 }
 
-export function CustomersPage({ searchQuery = '' }: Props) {
+export function CustomersPage({ searchQuery = '', onSearchChange }: Props) {
   const navigate = useNavigate()
   const location = useLocation()
   const { slug } = useParams<{ slug?: string }>()
@@ -216,6 +218,12 @@ export function CustomersPage({ searchQuery = '' }: Props) {
               Find and manage accounts.
             </p>
           </div>
+          <MobileSearchField
+            value={searchQuery}
+            onChange={(next) => onSearchChange?.(next)}
+            placeholder="Search accounts..."
+            ariaLabel="Search accounts"
+          />
           <div className="relative z-30 grid grid-cols-2 gap-2 overflow-visible lg:flex lg:shrink-0 lg:flex-wrap lg:justify-end">
             <DateRangeFilter
               from={dateFrom}

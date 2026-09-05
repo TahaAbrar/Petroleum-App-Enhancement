@@ -13,6 +13,8 @@ const PREFETCH = 50
 export type CustomerHistoryState = {
   rows: CustomerTransaction[]
   total: number
+  totalDebit: number
+  totalCredit: number
   loading: boolean
   loadingMore: boolean
   hasMore: boolean
@@ -30,6 +32,8 @@ export function useCustomerHistory(
 ): CustomerHistoryState {
   const [fetched, setFetched] = useState<CustomerTransaction[]>([])
   const [total, setTotal] = useState(0)
+  const [totalDebit, setTotalDebit] = useState(0)
+  const [totalCredit, setTotalCredit] = useState(0)
   const [visible, setVisible] = useState(PAGE)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -49,6 +53,8 @@ export function useCustomerHistory(
     if (!accid) {
       setFetched([])
       setTotal(0)
+      setTotalDebit(0)
+      setTotalCredit(0)
       setLoading(false)
       return
     }
@@ -59,6 +65,8 @@ export function useCustomerHistory(
     setFetched([])
     setVisible(PAGE)
     setTotal(0)
+    setTotalDebit(0)
+    setTotalCredit(0)
     fetchCustomerTransactions(
       accid,
       {
@@ -75,12 +83,16 @@ export function useCustomerHistory(
         if (id !== gen.current) return
         setFetched(data.transactions)
         setTotal(data.total)
+        setTotalDebit(data.totalDebit ?? 0)
+        setTotalCredit(data.totalCredit ?? 0)
         setVisible(Math.min(PAGE, data.total))
       })
       .catch((err) => {
         if (ac.signal.aborted || id !== gen.current) return
         setFetched([])
         setTotal(0)
+        setTotalDebit(0)
+        setTotalCredit(0)
         toast.error(err instanceof Error ? err.message : 'Could not load transactions')
       })
       .finally(() => {
@@ -112,6 +124,8 @@ export function useCustomerHistory(
           limit: Math.min(limit, 50),
         })
         setTotal(data.total)
+        setTotalDebit(data.totalDebit ?? 0)
+        setTotalCredit(data.totalCredit ?? 0)
         setFetched((prev) => {
           const seen = new Set(prev.map((row) => row.trid))
           return [...prev, ...data.transactions.filter((row) => !seen.has(row.trid))]
@@ -148,6 +162,8 @@ export function useCustomerHistory(
   return {
     rows: fetched.slice(0, Math.min(visible, fetched.length)),
     total,
+    totalDebit,
+    totalCredit,
     loading,
     loadingMore,
     hasMore: visible < total,

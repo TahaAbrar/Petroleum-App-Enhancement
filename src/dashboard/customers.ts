@@ -35,12 +35,16 @@ export type CustomerTxType = 'Credit' | 'Debit'
 export type CustomerTransaction = {
   trid: number
   id: string
+  vno: string
   when: string
   type: CustomerTxType
   product: string
+  description: string
   quantity: string
   rate: string
   amount: number
+  debit: number
+  credit: number
   balance: number
   by: string
 }
@@ -119,6 +123,8 @@ type DetailResponse = {
 type TxResponse = {
   ok: true
   total: number
+  totalDebit: number
+  totalCredit: number
   offset: number
   limit: number
   transactions: CustomerTransaction[]
