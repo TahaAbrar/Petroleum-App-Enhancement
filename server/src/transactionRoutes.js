@@ -954,7 +954,7 @@ transactionRouter.post('/delete', async (req, res) => {
     await tryQuery('RecordTB', () =>
       pool
         .request()
-        .input('dated', sql.DateTime, dated)
+        .input('dated', sql.DateTime, new Date())
         .input('userId', sql.Int, userId)
         .input('refNo', sql.NVarChar(50), auditRef)
         .input('description', sql.NVarChar(1500), auditDesc)
