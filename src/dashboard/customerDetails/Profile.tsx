@@ -104,16 +104,17 @@ export function CustomerDetailsProfile({ view, detailLoading, onBack }: Props) {
 
       <div className="flex flex-col gap-2.5 lg:hidden">
         <BalanceCard
-          label="Opening Balance"
-          value={view.openingBalance}
-          valueClass="text-ink"
-          iconTone="fuel"
-        />
-        <BalanceCard
           label="Closing Balance"
           value={view.currentBalance}
           valueClass={view.currentBalance < 0 ? 'text-debit' : 'text-credit'}
           iconTone="amber"
+          highlight
+        />
+        <BalanceCard
+          label="Opening Balance"
+          value={view.openingBalance}
+          valueClass="text-ink"
+          iconTone="fuel"
         />
         <div className="grid grid-cols-3 gap-2">
           <MiniStat

@@ -50,24 +50,42 @@ export function BalanceCard({
   value,
   valueClass,
   iconTone,
+  highlight = false,
 }: {
   label: string
   value: number
   valueClass: string
   iconTone: 'fuel' | 'amber'
+  highlight?: boolean
 }) {
   return (
-    <article className={`${panel} flex items-center gap-3 rounded-2xl p-3.5`}>
+    <article
+      className={`flex items-center gap-3 ${
+        highlight
+          ? 'rounded-2xl border-2 border-fuel bg-[#fff8e1] p-3.5 shadow-[0_10px_24px_rgba(245,197,24,0.38)]'
+          : `${panel} rounded-2xl p-3.5`
+      }`}
+    >
       <div
-        className={`grid size-10 shrink-0 place-items-center rounded-xl ${
-          iconTone === 'fuel' ? 'bg-fuel-soft text-[#c99700]' : 'bg-[#fff1e0] text-orange'
-        }`}
+        className={`grid shrink-0 place-items-center rounded-xl ${
+          highlight ? 'size-12' : 'size-10'
+        } ${iconTone === 'fuel' ? 'bg-fuel-soft text-[#c99700]' : 'bg-[#fff1e0] text-orange'}`}
       >
         <WalletIcon />
       </div>
       <div className="min-w-0">
-        <p className="m-0 text-[0.72rem] font-semibold text-muted">{label}</p>
-        <p className={`mt-0.5 mb-0 text-[1.05rem] tracking-[-0.02em] ${valueClass}`}>
+        <p
+          className={`m-0 font-semibold ${
+            highlight ? 'text-[0.78rem] font-bold tracking-[0.02em] text-ink uppercase' : 'text-[0.72rem] text-muted'
+          }`}
+        >
+          {label}
+        </p>
+        <p
+          className={`mt-0.5 mb-0 tracking-[-0.02em] ${
+            highlight ? 'text-[1.28rem]' : 'text-[1.05rem]'
+          } ${valueClass}`}
+        >
           <PkrValue value={value} amountClass="font-extrabold" />
         </p>
       </div>
