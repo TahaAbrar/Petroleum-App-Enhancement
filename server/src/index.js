@@ -46,11 +46,27 @@ const loginLimiter = rateLimit({
 })
 
 app.get('/api/health', async (_req, res) => {
+  const serverLabel = env.db.instanceName
+    ? `${env.db.server}\\${env.db.instanceName}`
+    : `${env.db.server}:${env.db.port}`
   try {
     await getPool()
-    res.json({ ok: true, db: 'up', service: 'fuelledger-api' })
-  } catch {
-    res.status(503).json({ ok: false, db: 'down' })
+    res.json({
+      ok: true,
+      db: 'up',
+      service: 'fuelledger-api',
+      server: serverLabel,
+      database: env.db.database,
+    })
+  } catch (err) {
+    res.status(503).json({
+      ok: false,
+      db: 'down',
+      service: 'fuelledger-api',
+      server: serverLabel,
+      database: env.db.database,
+      message: err?.message || 'DB unavailable',
+    })
   }
 })
 
@@ -165,7 +181,12 @@ app.use((err, _req, res, _next) => {
 })
 
 async function start() {
-  await getPool()
+  try {
+    await getPool()
+  } catch (err) {
+    // Keep API up so /api/health can report db:down; VPN/SQL may come online later
+    console.error('[fuelledger-api] DB not ready at startup —', err.message)
+  }
   app.listen(env.port, () => {
     console.log(`[fuelledger-api] listening on :${env.port} (SELECT-only auth + customers + transactions)`)
   })

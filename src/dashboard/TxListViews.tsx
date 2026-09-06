@@ -36,7 +36,12 @@ export function MobileVoucherCard({
             ) : (
               <p className="m-0 truncate text-[0.84rem] font-extrabold text-ink">{row.customer}</p>
             )}
-            <div className="mt-2 grid grid-cols-2 gap-2 text-[0.78rem]">
+            {row.description && row.description !== '—' ? (
+              <p className="mt-1 mb-0 line-clamp-2 text-[0.75rem] font-medium text-muted" title={row.description}>
+                {row.description}
+              </p>
+            ) : null}
+            <div className="mt-2 grid grid-cols-3 gap-2 text-[0.78rem]">
               <div>
                 <p className="m-0 text-[0.65rem] font-bold tracking-[0.04em] text-muted uppercase">Debit</p>
                 <p className={`mt-1 mb-0 font-extrabold ${row.debit > 0 ? 'text-debit' : 'text-muted'}`}>
@@ -48,6 +53,10 @@ export function MobileVoucherCard({
                 <p className={`mt-1 mb-0 font-extrabold ${row.credit > 0 ? 'text-credit' : 'text-muted'}`}>
                   {ledgerAmount(row.credit)}
                 </p>
+              </div>
+              <div>
+                <p className="m-0 text-[0.65rem] font-bold tracking-[0.04em] text-muted uppercase">Balance</p>
+                <p className="mt-1 mb-0 font-extrabold text-ink">{ledgerAmount(row.balance)}</p>
               </div>
             </div>
             {canDelete ? (
@@ -76,9 +85,11 @@ export function TxTableHead({ canDelete }: { canDelete: boolean }) {
         <Th>Date</Th>
         <Th>V.No</Th>
         <Th>Account Name</Th>
+        <Th>Description</Th>
         <Th>Type</Th>
         <Th className="text-right">Debit</Th>
         <Th className="text-right">Credit</Th>
+        <Th className="text-right">Acc Bal.</Th>
         {canDelete ? <Th className="text-center">Action</Th> : null}
       </tr>
     </thead>
@@ -88,13 +99,15 @@ export function TxTableHead({ canDelete }: { canDelete: boolean }) {
 export function TxTableColgroup({ canDelete }: { canDelete: boolean }) {
   return (
     <colgroup>
+      <col className="w-[9%]" />
+      <col className="w-[7%]" />
+      <col className={canDelete ? 'w-[16%]' : 'w-[18%]'} />
+      <col className={canDelete ? 'w-[18%]' : 'w-[20%]'} />
+      <col className="w-[9%]" />
       <col className="w-[11%]" />
-      <col className="w-[8%]" />
-      <col className={canDelete ? 'w-[26%]' : 'w-[30%]'} />
-      <col className="w-[12%]" />
-      <col className="w-[16%]" />
-      <col className="w-[16%]" />
-      {canDelete ? <col className="w-[11%]" /> : null}
+      <col className="w-[11%]" />
+      <col className="w-[11%]" />
+      {canDelete ? <col className="w-[8%]" /> : null}
     </colgroup>
   )
 }
@@ -145,6 +158,11 @@ export function TxLedgerRow({
           </span>
         )}
       </Td>
+      <Td className="min-w-0">
+        <span className="line-clamp-2 break-words" title={row.description || ''}>
+          {row.description && row.description !== '—' ? row.description : '—'}
+        </span>
+      </Td>
       <Td>{row.paymentType || '—'}</Td>
       <Td className={`text-right font-bold ${row.debit > 0 ? 'text-debit' : ''}`}>
         {ledgerAmount(row.debit)}
@@ -152,6 +170,7 @@ export function TxLedgerRow({
       <Td className={`text-right font-bold ${row.credit > 0 ? 'text-credit' : ''}`}>
         {ledgerAmount(row.credit)}
       </Td>
+      <Td className="text-right font-bold text-ink">{ledgerAmount(row.balance)}</Td>
       {canDelete ? (
         <Td className="text-center">
           <button

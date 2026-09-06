@@ -19,6 +19,8 @@ export const env = {
   db: {
     server: required('DB_SERVER'),
     port: Number(process.env.DB_PORT || 1433),
+    // Named instance (e.g. SQLEXPRESS) — resolves dynamic TCP port via SQL Browser UDP 1434
+    instanceName: (process.env.DB_INSTANCE || '').trim() || undefined,
     database: required('DB_DATABASE'),
     user: required('DB_USER'),
     password: required('DB_PASSWORD'),
@@ -30,8 +32,9 @@ export const env = {
     },
     // Hard safety: never allow long-running or write-heavy sessions from this pool
     pool: { max: 5, min: 0, idleTimeoutMillis: 30000 },
-    requestTimeout: 10000,
-    connectionTimeout: 10000,
+    // Remote / VPN clients need a longer connect window than local Docker
+    requestTimeout: Number(process.env.DB_REQUEST_TIMEOUT || 15000),
+    connectionTimeout: Number(process.env.DB_CONNECTION_TIMEOUT || 20000),
   },
   jwtSecret: required('JWT_SECRET'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '8h',

@@ -13,6 +13,8 @@ import { safeEqualPassword } from './security.js'
 export const transactionRouter = Router()
 
 let cachedBizId = null
+/** Client DBs may use CompId instead of BizId. */
+let cachedCompanyCol = null
 
 async function resolveBizId(pool) {
   if (cachedBizId != null) return cachedBizId
@@ -21,6 +23,24 @@ async function resolveBizId(pool) {
   `)
   cachedBizId = result.recordset[0]?.CompanyId ?? 1
   return cachedBizId
+}
+
+async function resolveCompanyCol(pool) {
+  if (cachedCompanyCol != null) return cachedCompanyCol
+  const result = await pool.request().query(`
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = N'dbo'
+      AND TABLE_NAME = N'Leger'
+      AND COLUMN_NAME IN (N'BizId', N'CompId')
+  `)
+  const names = result.recordset.map((row) => row.COLUMN_NAME)
+  cachedCompanyCol = names.includes('BizId')
+    ? 'BizId'
+    : names.includes('CompId')
+      ? 'CompId'
+      : 'BizId'
+  return cachedCompanyCol
 }
 
 const optionalIsoDate = z
@@ -39,7 +59,7 @@ const listQuerySchema = z.object({
   dateFrom: optionalIsoDate,
   dateTo: optionalIsoDate,
   kind: z.enum(['all', 'credit', 'debit']).default('all'),
-  sort: z.enum(['recent', 'oldest']).default('recent'),
+  sort: z.enum(['recent', 'oldest']).default('oldest'),
   page: z.coerce.number().int().min(1).max(10000).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(50),
 })
@@ -175,34 +195,9 @@ function displayProduct(row) {
   return fields.product
 }
 
-/** Payment mode for transactions table — from SlipType, Description, account, Leger.Type. */
+/** Type column = real Leger.Type from DB (no Cash/Transfer remapping). */
 function resolvePaymentType(row) {
-  const legerType = cleanText(row.Type)
-  if (legerType === 'Purchases') return 'Purchase'
-  if (legerType === 'Sales') return 'Sale'
-  if (legerType && legerType !== 'JV' && legerType !== 'Slip') return legerType
-
-  const slipType = cleanText(row.SlipType)
-  if (slipType) {
-    return slipType.charAt(0).toUpperCase() + slipType.slice(1).toLowerCase()
-  }
-
-  const desc = cleanText(row.Description).toLowerCase()
-  const acc = cleanText(row.AccName).toLowerCase()
-
-  if (/\bonline\b|1bill|jazz\s*cash|\bpos\b|card\s*pos|card machine|byco company 1bill/.test(desc)) {
-    return 'Online'
-  }
-  if (/\btransfer\b|khata|\bcheck\b|cheque/.test(desc)) {
-    return 'Transfer'
-  }
-
-  if (/bank|mcb|alfalah|meezan|hbl|ubl|faysal/.test(acc)) return 'Online'
-
-  if (legerType === 'JV') return 'Transfer'
-  if (legerType === 'Slip') return 'Cash'
-
-  return legerType || '—'
+  return cleanText(row.Type) || '—'
 }
 
 function mapRow(row, kind) {
@@ -226,7 +221,10 @@ function mapRow(row, kind) {
     amount,
     debit: money(row.Debit),
     credit: money(row.Credit),
-    balance: money(row.RunningBalance),
+    // Prefer stored Leger.Bal (nvarchar); fall back to computed running balance.
+    balance: row.Bal != null && String(row.Bal).trim() !== ''
+      ? money(row.Bal)
+      : money(row.RunningBalance),
     reference: cleanText(row.RefNo) || (row.VNo != null && row.VNo !== '' ? String(row.VNo) : '—'),
     by: cleanText(row.UserName) || cleanText(row.UserType) || '—',
     description: cleanText(row.Description) || '—',
@@ -272,12 +270,12 @@ function voucherKeysCte() {
           VoucherKeys.AnchorTrid,
           ROW_NUMBER() OVER (
             ORDER BY
+              CASE WHEN @sort = N'recent' THEN VoucherKeys.AnchorTrid END DESC,
+              CASE WHEN @sort = N'oldest' THEN VoucherKeys.AnchorTrid END ASC,
               CASE WHEN @sort = N'recent' THEN VoucherKeys.Dated END DESC,
               CASE WHEN @sort = N'oldest' THEN VoucherKeys.Dated END ASC,
               CASE WHEN @sort = N'recent' THEN VoucherKeys.VNo END DESC,
-              CASE WHEN @sort = N'oldest' THEN VoucherKeys.VNo END ASC,
-              CASE WHEN @sort = N'recent' THEN VoucherKeys.AnchorTrid END DESC,
-              CASE WHEN @sort = N'oldest' THEN VoucherKeys.AnchorTrid END ASC
+              CASE WHEN @sort = N'oldest' THEN VoucherKeys.VNo END ASC
           ) AS VoucherRn
         FROM VoucherKeys
       )
@@ -322,7 +320,7 @@ async function tryQuery(label, run) {
  * Resolve all VNos to delete: source VNo + nearest opposite debit/credit leg
  * (Slip pairs often use consecutive VNos with matching amounts).
  */
-async function resolveDeleteVnos(pool, { trid, vno, type, dated, debit, credit, bizId }) {
+async function resolveDeleteVnos(pool, { trid, vno, type, dated, debit, credit, bizId, companyCol }) {
   const vnos = new Set()
   if (vno != null && vno !== '') vnos.add(Number(vno))
 
@@ -339,7 +337,7 @@ async function resolveDeleteVnos(pool, { trid, vno, type, dated, debit, credit, 
     SELECT TOP (1) L.VNo, L.Trid
     FROM dbo.Leger L
     WHERE L.Trid <> @trid
-      AND L.BizId = @bizId
+      AND L.${companyCol} = @bizId
       AND L.Type = @type
       AND CAST(L.Dated AS date) = CAST(@dated AS date)
       AND (
@@ -366,7 +364,7 @@ async function resolveDeleteVnos(pool, { trid, vno, type, dated, debit, credit, 
         .query(`
           SELECT DISTINCT L.VNo
           FROM dbo.Leger L
-          WHERE L.BizId = @bizId
+          WHERE L.${companyCol} = @bizId
             AND L.Type = @type
             AND L.VNo = @vno
             AND CAST(L.Dated AS date) = CAST(@dated AS date)
@@ -380,7 +378,7 @@ async function resolveDeleteVnos(pool, { trid, vno, type, dated, debit, credit, 
   return [...vnos].filter((n) => Number.isFinite(n))
 }
 
-async function deleteLegerForVno(transaction, { vno, type, dated, bizId, useDated }) {
+async function deleteLegerForVno(transaction, { vno, type, dated, bizId, useDated, companyCol }) {
   const req = new sql.Request(transaction)
   req.input('vno', sql.Int, vno)
   req.input('type', sql.NVarChar(50), type)
@@ -392,7 +390,7 @@ async function deleteLegerForVno(transaction, { vno, type, dated, bizId, useDate
       WHERE VNo = @vno
         AND Type = @type
         AND CAST(Dated AS date) = CAST(@dated AS date)
-        AND BizId = @bizId
+        AND ${companyCol} = @bizId
     `)
     return result.rowsAffected?.[0] ?? 0
   }
@@ -400,12 +398,12 @@ async function deleteLegerForVno(transaction, { vno, type, dated, bizId, useDate
     DELETE FROM dbo.Leger
     WHERE VNo = @vno
       AND Type = @type
-      AND BizId = @bizId
+      AND ${companyCol} = @bizId
   `)
   return result.rowsAffected?.[0] ?? 0
 }
 
-async function runSecondaryDeletes(pool, { type, vnos, dated, bizId }) {
+async function runSecondaryDeletes(pool, { type, vnos, dated, bizId, dno, companyCol }) {
   for (const vno of vnos) {
     if (type === 'JV') {
       await tryQuery('JV', () =>
@@ -413,7 +411,7 @@ async function runSecondaryDeletes(pool, { type, vnos, dated, bizId }) {
           .request()
           .input('vno', sql.Int, vno)
           .input('bizId', sql.Int, bizId)
-          .query(`DELETE FROM dbo.JV WHERE VNo = @vno AND BizId = @bizId`),
+          .query(`DELETE FROM dbo.JV WHERE VNo = @vno AND ${companyCol} = @bizId`),
       )
     }
 
@@ -428,7 +426,7 @@ async function runSecondaryDeletes(pool, { type, vnos, dated, bizId }) {
             DELETE FROM dbo.Slip
             WHERE VNo = @vno
               AND CAST(Dated AS date) = CAST(@dated AS date)
-              AND BizId = @bizId
+              AND ${companyCol} = @bizId
           `),
       )
       await tryQuery('SlipDet', () =>
@@ -436,12 +434,21 @@ async function runSecondaryDeletes(pool, { type, vnos, dated, bizId }) {
           .request()
           .input('vno', sql.Int, vno)
           .input('dated', sql.DateTime, dated)
-          .input('bizId', sql.Int, bizId)
           .query(`
             DELETE FROM dbo.SlipDet
             WHERE VNo = @vno
               AND CAST(Dated AS date) = CAST(@dated AS date)
-              AND BizId = @bizId
+          `),
+      )
+      // Desktop: Delete SlipLeger where SlipNo = VNo and DNo = ...
+      await tryQuery('SlipLeger', () =>
+        pool
+          .request()
+          .input('slipNo', sql.NVarChar(50), String(vno))
+          .input('dno', sql.Int, dno == null ? 0 : Number(dno))
+          .query(`
+            DELETE FROM dbo.SlipLeger
+            WHERE SlipNo = @slipNo AND DNo = @dno
           `),
       )
     }
@@ -452,22 +459,19 @@ async function runSecondaryDeletes(pool, { type, vnos, dated, bizId }) {
           .request()
           .input('vno', sql.Int, vno)
           .input('dated', sql.DateTime, dated)
-          .input('bizId', sql.Int, bizId)
           .query(`
             DELETE FROM dbo.PR
             WHERE VNo = @vno
               AND CAST(Dated AS date) = CAST(@dated AS date)
-              AND BizId = @bizId
           `),
       )
       await tryQuery('Stockleger Purchases', () =>
         pool
           .request()
           .input('vno', sql.Int, vno)
-          .input('bizId', sql.Int, bizId)
           .query(`
             DELETE FROM dbo.Stockleger
-            WHERE VNo = @vno AND RefNo = N'Purchases' AND BizId = @bizId
+            WHERE VNo = @vno AND RefNo = N'Purchases'
           `),
       )
     }
@@ -477,25 +481,22 @@ async function runSecondaryDeletes(pool, { type, vnos, dated, bizId }) {
         pool
           .request()
           .input('vno', sql.Int, vno)
-          .input('bizId', sql.Int, bizId)
-          .query(`DELETE FROM dbo.Sales WHERE VNo = @vno AND BizId = @bizId`),
+          .query(`DELETE FROM dbo.Sales WHERE VNo = @vno`),
       )
       await tryQuery('Stockleger Sales', () =>
         pool
           .request()
           .input('vno', sql.Int, vno)
-          .input('bizId', sql.Int, bizId)
           .query(`
             DELETE FROM dbo.Stockleger
-            WHERE VNo = @vno AND RefNo = N'Sales' AND BizId = @bizId
+            WHERE VNo = @vno AND RefNo = N'Sales'
           `),
       )
       await tryQuery('SaleDetail', () =>
         pool
           .request()
           .input('vno', sql.Int, vno)
-          .input('bizId', sql.Int, bizId)
-          .query(`DELETE FROM dbo.SaleDetail WHERE VNo = @vno AND BizId = @bizId`),
+          .query(`DELETE FROM dbo.SaleDetail WHERE VNo = @vno`),
       )
     }
 
@@ -505,22 +506,19 @@ async function runSecondaryDeletes(pool, { type, vnos, dated, bizId }) {
           .request()
           .input('vno', sql.Int, vno)
           .input('dated', sql.DateTime, dated)
-          .input('bizId', sql.Int, bizId)
           .query(`
             DELETE FROM dbo.SaleReturn
             WHERE VNo = @vno
               AND CAST(Dated AS date) = CAST(@dated AS date)
-              AND BizId = @bizId
           `),
       )
       await tryQuery('Stockleger SaleReturn', () =>
         pool
           .request()
           .input('vno', sql.Int, vno)
-          .input('bizId', sql.Int, bizId)
           .query(`
             DELETE FROM dbo.Stockleger
-            WHERE VNo = @vno AND RefNo = N'SaleReturn' AND BizId = @bizId
+            WHERE VNo = @vno AND RefNo = N'SaleReturn'
           `),
       )
     }
@@ -531,29 +529,34 @@ async function runSecondaryDeletes(pool, { type, vnos, dated, bizId }) {
           .request()
           .input('vno', sql.Int, vno)
           .input('dated', sql.DateTime, dated)
-          .input('bizId', sql.Int, bizId)
           .query(`
             DELETE FROM dbo.PurchaseReturn
             WHERE VNo = @vno
               AND CAST(Dated AS date) = CAST(@dated AS date)
-              AND BizId = @bizId
           `),
       )
       await tryQuery('Stockleger PurchaseReturn', () =>
         pool
           .request()
           .input('vno', sql.Int, vno)
-          .input('bizId', sql.Int, bizId)
           .query(`
             DELETE FROM dbo.Stockleger
-            WHERE VNo = @vno AND RefNo = N'PurchaseReturn' AND BizId = @bizId
+            WHERE VNo = @vno AND RefNo = N'PurchaseReturn'
           `),
       )
     }
   }
 }
 
-const STATUS_SQL = `(L.Status IS NULL OR L.Status = N'Posted')`
+/** Unposted only — dashboard Recent + Transactions (kind=all). */
+const UNPOSTED_SQL = `(L.Status IS NULL OR LTRIM(RTRIM(L.Status)) = N'')`
+/** Credit/Debit pages — same as before: NULL + Posted. */
+const ALL_STATUS_SQL = `(L.Status IS NULL OR L.Status = N'Posted')`
+
+function statusSqlForKind(kind) {
+  if (kind === 'credit' || kind === 'debit') return ALL_STATUS_SQL
+  return UNPOSTED_SQL
+}
 
 function filterSql(alias) {
   const dated = alias === 'Tx' ? 'Tx.Dated' : 'L.Dated'
@@ -609,6 +612,7 @@ transactionRouter.get('/stats', async (req, res) => {
     return res.status(400).json({ ok: false, message: 'Invalid request' })
   }
   const { kind } = parsed.data
+  const STATUS_SQL = statusSqlForKind(kind)
   const amountCol = kind === 'credit' ? 'Credit' : 'Debit'
   const kindFilter =
     kind === 'credit'
@@ -700,6 +704,7 @@ transactionRouter.get('/', async (req, res) => {
 
   const { kind, sort, page, pageSize } = parsed.data
   const offset = (page - 1) * pageSize
+  const STATUS_SQL = statusSqlForKind(kind)
 
   try {
     const pool = await getPool()
@@ -775,6 +780,7 @@ transactionRouter.get('/', async (req, res) => {
           L.RHO,
           L.Accid,
           A.AccName,
+          L.Bal,
           ISNULL(A.OpBal, 0) + SUM(ISNULL(L.Debit, 0) - ISNULL(L.Credit, 0))
             OVER (PARTITION BY L.Accid ORDER BY L.Trid ROWS UNBOUNDED PRECEDING) AS RunningBalance
         FROM dbo.Leger L
@@ -808,6 +814,7 @@ transactionRouter.get('/', async (req, res) => {
         Tx.RHO,
         Tx.Accid,
         Tx.AccName,
+        Tx.Bal,
         Tx.RunningBalance,
         U.UserName,
         U.Type AS UserType,
@@ -887,6 +894,7 @@ transactionRouter.post('/delete', async (req, res) => {
     }
 
     const bizId = await resolveBizId(pool)
+    const companyCol = await resolveCompanyCol(pool)
 
     const sourceResult = await pool
       .request()
@@ -903,9 +911,10 @@ transactionRouter.post('/delete', async (req, res) => {
           L.Description,
           L.Accid,
           L.DNo,
-          L.RefNo
+          L.RefNo,
+          L.Bal
         FROM dbo.Leger L
-        WHERE L.Trid = @trid AND L.BizId = @bizId
+        WHERE L.Trid = @trid AND L.${companyCol} = @bizId
       `)
 
     const source = sourceResult.recordset[0]
@@ -933,6 +942,7 @@ transactionRouter.post('/delete', async (req, res) => {
       debit,
       credit,
       bizId,
+      companyCol,
     })
 
     if (vnos.length === 0) {
@@ -963,7 +973,7 @@ transactionRouter.post('/delete', async (req, res) => {
         .input('timed', sql.NVarChar(50), new Date().toISOString().slice(0, 19).replace('T', ' '))
         .input('bizId', sql.Int, bizId)
         .query(`
-          INSERT INTO dbo.RecordTB (Dated, UserId, RefNo, Description, Debit, Credit, Timed, BizId)
+          INSERT INTO dbo.RecordTB (Dated, UserId, RefNo, Description, Debit, Credit, Timed, ${companyCol})
           VALUES (
             CAST(@dated AS date),
             @userId,
@@ -989,6 +999,7 @@ transactionRouter.post('/delete', async (req, res) => {
           dated,
           bizId,
           useDated,
+          companyCol,
         })
       }
       await transaction.commit()
@@ -1001,7 +1012,14 @@ transactionRouter.post('/delete', async (req, res) => {
       throw err
     }
 
-    await runSecondaryDeletes(pool, { type, vnos, dated, bizId })
+    await runSecondaryDeletes(pool, {
+      type,
+      vnos,
+      dated,
+      bizId,
+      dno: source.DNo,
+      companyCol,
+    })
 
     const vnoLabel = vnos.length === 1 ? String(vnos[0]) : vnos.join(', ')
     const message = `Debit and Credit entries deleted for V.No ${vnoLabel} (${type}).`

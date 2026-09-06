@@ -6,24 +6,44 @@ let poolPromise = null
 
 export function getPool() {
   if (!poolPromise) {
-    poolPromise = new sql.ConnectionPool({
+    const options = { ...env.db.options }
+    if (env.db.instanceName) {
+      options.instanceName = env.db.instanceName
+    }
+
+    const config = {
       server: env.db.server,
-      port: env.db.port,
       database: env.db.database,
       user: env.db.user,
       password: env.db.password,
-      options: env.db.options,
+      options,
       pool: env.db.pool,
       requestTimeout: env.db.requestTimeout,
       connectionTimeout: env.db.connectionTimeout,
-    })
+    }
+    // When using a named instance, omit port so SQL Browser resolves the dynamic TCP port
+    if (!env.db.instanceName) {
+      config.port = env.db.port
+    }
+
+    const target = env.db.instanceName
+      ? `${env.db.server}\\${env.db.instanceName}/${env.db.database}`
+      : `${env.db.server}:${env.db.port}/${env.db.database}`
+
+    poolPromise = new sql.ConnectionPool(config)
       .connect()
       .then((pool) => {
         pool.on('error', (err) => {
           console.error('[db] pool error', err.message)
           poolPromise = null
         })
+        console.log(`[db] connected ${target}`)
         return pool
+      })
+      .catch((err) => {
+        poolPromise = null
+        console.error(`[db] connect failed ${target} — ${err.message}`)
+        throw err
       })
   }
   return poolPromise

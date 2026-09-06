@@ -294,7 +294,7 @@ export function DashboardShell({ config }: Props) {
       </aside>
 
       <div className="flex min-w-0 flex-col pb-[6.25rem] lg:pb-0">
-        <header className="sticky top-0 z-20 flex items-center justify-between bg-surface/95 px-4 py-3 backdrop-blur-md lg:hidden">
+        <header className="sticky top-0 z-40 flex items-center justify-between bg-surface/95 px-4 py-3 backdrop-blur-md lg:hidden">
           <button
             type="button"
             className="grid size-10 place-items-center rounded-xl border-0 bg-transparent text-ink"
@@ -345,7 +345,7 @@ export function DashboardShell({ config }: Props) {
           </div>
         </header>
 
-        <header className="sticky top-0 z-20 hidden items-center gap-4 border-b border-transparent bg-surface/90 px-6 py-3.5 backdrop-blur-[10px] lg:grid lg:grid-cols-[1fr_auto]">
+        <header className="sticky top-0 z-40 hidden items-center gap-4 border-b border-transparent bg-surface/90 px-6 py-3.5 backdrop-blur-[10px] lg:grid lg:grid-cols-[1fr_auto]">
           <label className="mx-auto flex w-full max-w-[520px] items-center gap-2 rounded-full border border-line bg-white px-4 py-2.5 text-muted shadow-[0_2px_10px_rgba(26,29,33,0.03)]">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.7" />

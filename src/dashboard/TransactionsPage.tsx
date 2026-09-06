@@ -64,7 +64,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
 
   const [draft, setDraft] = useState<DraftFilters>(EMPTY_DRAFT)
   const [debouncedQuery, setDebouncedQuery] = useState(searchQuery)
-  const [sort] = useState<TxSort>('recent')
+  const [sort] = useState<TxSort>('oldest')
   const [page, setPage] = useState(1)
   const [customers, setCustomers] = useState<TransactionCustomer[]>(
     () => peekTransactionCustomers() ?? [],
@@ -289,10 +289,10 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
       </div>
 
       <section
-        className={`${panel} relative z-30 overflow-visible rounded-2xl p-4 lg:p-5`}
+        className={`${panel} relative z-0 overflow-visible rounded-2xl p-4 lg:p-5`}
         aria-label="Filters"
       >
-        <div className="relative z-30 grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2 xl:grid-cols-[1.2fr_1.4fr_1fr]">
+        <div className="relative z-0 grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2 xl:grid-cols-[1.2fr_1.4fr_1fr]">
           <label className="flex min-w-0 flex-col gap-1.5 overflow-visible">
             <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">Customer</span>
             <SearchableCustomerFilter
