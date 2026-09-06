@@ -4,7 +4,7 @@ import { getPool, sql } from './db.js'
 
 /**
  * Chart of Accounts read APIs — ChartAcc → GroupReg → AccReg → Leger.
- * SELECT only. Uses BizId from CompanyPro.CompanyId (defaults to 1).
+ * SELECT only. Company filter uses Leger.BizId or Leger.CompId.
  */
 
 export const coaRouter = Router()
@@ -34,6 +34,7 @@ const summaryQuerySchema = z.object({
 })
 
 let cachedBizId = null
+let cachedCompanyCol = null
 
 async function resolveBizId(pool) {
   if (cachedBizId != null) return cachedBizId
@@ -42,6 +43,24 @@ async function resolveBizId(pool) {
   `)
   cachedBizId = result.recordset[0]?.CompanyId ?? 1
   return cachedBizId
+}
+
+async function resolveCompanyCol(pool) {
+  if (cachedCompanyCol != null) return cachedCompanyCol
+  const result = await pool.request().query(`
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = N'dbo'
+      AND TABLE_NAME = N'Leger'
+      AND COLUMN_NAME IN (N'BizId', N'CompId')
+  `)
+  const names = result.recordset.map((row) => row.COLUMN_NAME)
+  cachedCompanyCol = names.includes('BizId')
+    ? 'BizId'
+    : names.includes('CompId')
+      ? 'CompId'
+      : 'BizId'
+  return cachedCompanyCol
 }
 
 function money(value) {
@@ -215,6 +234,7 @@ coaRouter.get('/charts/:chartId/sub-charts', async (req, res) => {
   try {
     const pool = await getPool()
     const bizId = await resolveBizId(pool)
+    const companyCol = await resolveCompanyCol(pool)
     const result = await pool
       .request()
       .input('chartId', sql.Int, parsed.data)
@@ -227,7 +247,7 @@ coaRouter.get('/charts/:chartId/sub-charts', async (req, res) => {
           COUNT(DISTINCT A.Accid) AS AccountCount
         FROM dbo.GroupReg G
         LEFT JOIN dbo.AccReg A ON A.GroupId = G.GroupId
-        LEFT JOIN dbo.Leger L ON L.Accid = A.Accid AND L.BizId = @bizId
+        LEFT JOIN dbo.Leger L ON L.Accid = A.Accid AND L.${companyCol} = @bizId
         WHERE G.ChartId = @chartId
         GROUP BY G.ChartId, G.GroupId, G.GroupName
         ORDER BY G.GroupName
@@ -255,6 +275,7 @@ coaRouter.get('/groups/:groupId/accounts', async (req, res) => {
   try {
     const pool = await getPool()
     const bizId = await resolveBizId(pool)
+    const companyCol = await resolveCompanyCol(pool)
     const result = await pool
       .request()
       .input('groupId', sql.Int, parsed.data)
@@ -274,7 +295,7 @@ coaRouter.get('/groups/:groupId/accounts', async (req, res) => {
         FROM dbo.AccReg A
         INNER JOIN dbo.GroupReg G ON A.GroupId = G.GroupId
         INNER JOIN dbo.ChartAcc C ON G.ChartId = C.ChartId
-        LEFT JOIN dbo.Leger L ON L.Accid = A.Accid AND L.BizId = @bizId
+        LEFT JOIN dbo.Leger L ON L.Accid = A.Accid AND L.${companyCol} = @bizId
         WHERE A.GroupId = @groupId
         GROUP BY
           A.Accid, A.AccNo, A.AccName, A.Ph, A.Urdo, A.Status,
@@ -310,6 +331,7 @@ coaRouter.get('/accounts/:accid', async (req, res) => {
   try {
     const pool = await getPool()
     const bizId = await resolveBizId(pool)
+    const companyCol = await resolveCompanyCol(pool)
     const result = await pool
       .request()
       .input('accid', sql.Int, parsed.data)
@@ -328,7 +350,7 @@ coaRouter.get('/accounts/:accid', async (req, res) => {
         FROM dbo.AccReg A
         INNER JOIN dbo.GroupReg G ON A.GroupId = G.GroupId
         INNER JOIN dbo.ChartAcc C ON G.ChartId = C.ChartId
-        LEFT JOIN dbo.Leger L ON L.Accid = A.Accid AND L.BizId = @bizId
+        LEFT JOIN dbo.Leger L ON L.Accid = A.Accid AND L.${companyCol} = @bizId
         WHERE A.Accid = @accid
         GROUP BY
           A.Accid, A.AccNo, A.AccName, A.Ph, A.Status,
@@ -369,6 +391,7 @@ coaRouter.get('/accounts/:accid/summary', async (req, res) => {
   try {
     const pool = await getPool()
     const bizId = await resolveBizId(pool)
+    const companyCol = await resolveCompanyCol(pool)
     const result = await pool
       .request()
       .input('accid', sql.Int, accidParsed.data)
@@ -386,7 +409,7 @@ coaRouter.get('/accounts/:accid/summary', async (req, res) => {
           SUM(ISNULL(Other, 0)) AS Others
         FROM dbo.Leger
         WHERE Accid = @accid
-          AND BizId = @bizId
+          AND ${companyCol} = @bizId
           AND (@hasFrom = 0 OR CAST(Dated AS date) >= @dateFrom)
           AND (@hasTo = 0 OR CAST(Dated AS date) <= @dateTo)
       `)

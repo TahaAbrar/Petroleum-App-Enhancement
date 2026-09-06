@@ -93,10 +93,10 @@ export function CustomerPortalTransactions({ homePath }: Props) {
       </div>
 
       <section
-        className={`${panel} relative z-30 overflow-visible rounded-2xl p-4 lg:px-5 lg:py-4`}
+        className={`${panel} relative z-0 overflow-visible rounded-2xl p-4 lg:px-5 lg:py-4`}
         aria-label="Account header"
       >
-        <div className="relative z-30 flex flex-col gap-3 overflow-visible sm:flex-row sm:items-end sm:justify-between">
+        <div className="relative z-0 flex flex-col gap-3 overflow-visible sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="m-0 text-[0.75rem] font-semibold uppercase tracking-[0.04em] text-muted">
               Account Name
@@ -108,7 +108,7 @@ export function CustomerPortalTransactions({ homePath }: Props) {
               Group: {account?.groupName || '—'}
             </p>
           </div>
-          <div className="relative z-40 shrink-0 overflow-visible">
+          <div className="relative z-0 shrink-0 overflow-visible">
             <DateRangeFilter
               variant="pill"
               grouped

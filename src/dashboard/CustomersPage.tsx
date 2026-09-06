@@ -224,7 +224,7 @@ export function CustomersPage({ searchQuery = '', onSearchChange }: Props) {
             placeholder="Search accounts..."
             ariaLabel="Search accounts"
           />
-          <div className="relative z-30 grid grid-cols-2 gap-2 overflow-visible lg:flex lg:shrink-0 lg:flex-wrap lg:justify-end">
+          <div className="relative z-0 grid grid-cols-2 gap-2 overflow-visible lg:flex lg:shrink-0 lg:flex-wrap lg:justify-end">
             <DateRangeFilter
               from={dateFrom}
               to={dateTo}
