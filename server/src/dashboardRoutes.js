@@ -5,8 +5,11 @@ import { getPool, sql } from './db.js'
 export const dashboardRouter = Router()
 
 const STATUS_SQL = `(L.Status IS NULL OR L.Status = N'Posted')`
+/** Unposted only — Posted rows drop out of today's credit/debit/tx cards. */
+const UNPOSTED_SQL = `(L.Status IS NULL OR LTRIM(RTRIM(L.Status)) = N'')`
 /** Customer ledger only — avoids double-entry equality across all accounts. */
 const CUSTOMER_GROUP_SQL = `G.GroupName = N'CUSTOMERS'`
+const TODAY_SQL = `CAST(L.Dated AS date) = CAST(GETDATE() AS date)`
 
 const rangeSchema = z.enum(['7d', '1m', '6m', '1y']).default('7d')
 
@@ -131,6 +134,8 @@ function toBalanceTrend(points) {
 dashboardRouter.get('/stats', async (_req, res) => {
   try {
     const pool = await getPool()
+    // Headings stay Total Credit / Total Debit / Today's Transactions.
+    // Values = today's Unposted only (NULL/blank Status). Posted → amounts leave the cards.
     const result = await pool.request().query(`
       SELECT
         (SELECT COUNT(*) FROM dbo.AccReg) AS TotalCustomers,
@@ -138,20 +143,22 @@ dashboardRouter.get('/stats', async (_req, res) => {
          FROM dbo.Leger L
          INNER JOIN dbo.AccReg A ON A.Accid = L.Accid
          INNER JOIN dbo.GroupReg G ON G.GroupId = A.GroupId
-         WHERE ${STATUS_SQL}
+         WHERE ${UNPOSTED_SQL}
+           AND ${TODAY_SQL}
            AND ${CUSTOMER_GROUP_SQL}) AS TotalCredit,
         (SELECT SUM(CASE WHEN ISNULL(L.Debit, 0) > 0 THEN L.Debit ELSE 0 END)
          FROM dbo.Leger L
          INNER JOIN dbo.AccReg A ON A.Accid = L.Accid
          INNER JOIN dbo.GroupReg G ON G.GroupId = A.GroupId
-         WHERE ${STATUS_SQL}
+         WHERE ${UNPOSTED_SQL}
+           AND ${TODAY_SQL}
            AND ${CUSTOMER_GROUP_SQL}) AS TotalDebit,
         (SELECT COUNT(*)
          FROM dbo.Leger L
          INNER JOIN dbo.AccReg A ON A.Accid = L.Accid
          INNER JOIN dbo.GroupReg G ON G.GroupId = A.GroupId
-         WHERE ${STATUS_SQL}
-           AND CAST(L.Dated AS date) = CAST(GETDATE() AS date)) AS TodayTransactions
+         WHERE ${UNPOSTED_SQL}
+           AND ${TODAY_SQL}) AS TodayTransactions
     `)
     const row = result.recordset[0] || {}
     return res.json({

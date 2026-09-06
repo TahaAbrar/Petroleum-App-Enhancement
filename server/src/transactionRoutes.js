@@ -553,7 +553,15 @@ async function runSecondaryDeletes(pool, { type, vnos, dated, bizId }) {
   }
 }
 
-const STATUS_SQL = `(L.Status IS NULL OR L.Status = N'Posted')`
+/** Unposted only — dashboard Recent + Transactions (kind=all). */
+const UNPOSTED_SQL = `(L.Status IS NULL OR LTRIM(RTRIM(L.Status)) = N'')`
+/** Credit/Debit pages — same as before: NULL + Posted. */
+const ALL_STATUS_SQL = `(L.Status IS NULL OR L.Status = N'Posted')`
+
+function statusSqlForKind(kind) {
+  if (kind === 'credit' || kind === 'debit') return ALL_STATUS_SQL
+  return UNPOSTED_SQL
+}
 
 function filterSql(alias) {
   const dated = alias === 'Tx' ? 'Tx.Dated' : 'L.Dated'
@@ -609,6 +617,7 @@ transactionRouter.get('/stats', async (req, res) => {
     return res.status(400).json({ ok: false, message: 'Invalid request' })
   }
   const { kind } = parsed.data
+  const STATUS_SQL = statusSqlForKind(kind)
   const amountCol = kind === 'credit' ? 'Credit' : 'Debit'
   const kindFilter =
     kind === 'credit'
@@ -700,6 +709,7 @@ transactionRouter.get('/', async (req, res) => {
 
   const { kind, sort, page, pageSize } = parsed.data
   const offset = (page - 1) * pageSize
+  const STATUS_SQL = statusSqlForKind(kind)
 
   try {
     const pool = await getPool()

@@ -53,6 +53,8 @@ function dbFail(res, err) {
 }
 
 let cachedBizId = null
+/** Client DBs may use CompId instead of BizId on Leger. */
+let cachedCompanyCol = null
 
 async function resolveBizId(pool) {
   if (cachedBizId != null) return cachedBizId
@@ -63,7 +65,29 @@ async function resolveBizId(pool) {
   return cachedBizId
 }
 
+async function resolveCompanyCol(pool) {
+  if (cachedCompanyCol != null) return cachedCompanyCol
+  const result = await pool.request().query(`
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = N'dbo'
+      AND TABLE_NAME = N'Leger'
+      AND COLUMN_NAME IN (N'BizId', N'CompId')
+  `)
+  const names = result.recordset.map((row) => row.COLUMN_NAME)
+  cachedCompanyCol = names.includes('BizId')
+    ? 'BizId'
+    : names.includes('CompId')
+      ? 'CompId'
+      : ''
+  return cachedCompanyCol
+}
+
 async function accountBalance(pool, accid, bizId) {
+  const companyCol = await resolveCompanyCol(pool)
+  const companyFilter = companyCol
+    ? `AND (L.${companyCol} = @bizId OR L.${companyCol} IS NULL)`
+    : ''
   const result = await pool
     .request()
     .input('accid', sql.Int, accid)
@@ -76,7 +100,8 @@ async function accountBalance(pool, accid, bizId) {
         ISNULL(A.OpBal, 0) + ISNULL((
           SELECT SUM(ISNULL(L.Debit, 0)) - SUM(ISNULL(L.Credit, 0))
           FROM dbo.Leger L
-          WHERE L.Accid = A.Accid AND (L.BizId = @bizId OR L.BizId IS NULL)
+          WHERE L.Accid = A.Accid
+            ${companyFilter}
         ), 0) AS Balance
       FROM dbo.AccReg A
       WHERE A.Accid = @accid
@@ -94,10 +119,12 @@ async function nextVoucherNo(pool) {
 }
 
 async function nextDNo(pool, bizId) {
+  const companyCol = await resolveCompanyCol(pool)
+  const where = companyCol ? `WHERE ${companyCol} = @bizId` : ''
   const result = await pool.request().input('bizId', sql.Int, bizId).query(`
     SELECT ISNULL(MAX(DNo), 0) + 1 AS NewDNo
     FROM dbo.Leger
-    WHERE BizId = @bizId
+    ${where}
   `)
   return Math.max(1, Math.floor(money(result.recordset[0]?.NewDNo)))
 }
@@ -149,6 +176,24 @@ cashbookRouter.get('/accounts', async (_req, res) => {
   try {
     const pool = await getPool()
     const bizId = await resolveBizId(pool)
+    const companyCol = await resolveCompanyCol(pool)
+    const balanceJoin = companyCol
+      ? `LEFT JOIN (
+        SELECT
+          L.Accid,
+          SUM(ISNULL(L.Debit, 0)) - SUM(ISNULL(L.Credit, 0)) AS Net
+        FROM dbo.Leger L
+        WHERE L.${companyCol} = @bizId OR L.${companyCol} IS NULL
+        GROUP BY L.Accid
+      ) B ON B.Accid = A.Accid`
+      : `LEFT JOIN (
+        SELECT
+          L.Accid,
+          SUM(ISNULL(L.Debit, 0)) - SUM(ISNULL(L.Credit, 0)) AS Net
+        FROM dbo.Leger L
+        GROUP BY L.Accid
+      ) B ON B.Accid = A.Accid`
+
     const result = await pool.request().input('bizId', sql.Int, bizId).query(`
       SELECT
         A.Accid,
@@ -156,14 +201,7 @@ cashbookRouter.get('/accounts', async (_req, res) => {
         A.AccNo,
         ISNULL(A.OpBal, 0) + ISNULL(B.Net, 0) AS Balance
       FROM dbo.AccReg A
-      LEFT JOIN (
-        SELECT
-          L.Accid,
-          SUM(ISNULL(L.Debit, 0)) - SUM(ISNULL(L.Credit, 0)) AS Net
-        FROM dbo.Leger L
-        WHERE L.BizId = @bizId OR L.BizId IS NULL
-        GROUP BY L.Accid
-      ) B ON B.Accid = A.Accid
+      ${balanceJoin}
       ORDER BY A.AccName
     `)
 
@@ -293,6 +331,9 @@ cashbookRouter.post('/entries', async (req, res) => {
     const transaction = new sql.Transaction(pool)
     await transaction.begin()
     try {
+      const companyCol = await resolveCompanyCol(pool)
+      const companyInsertCol = companyCol || null
+
       const debitReq = new sql.Request(transaction)
       debitReq.input('dated', sql.DateTime, new Date())
       debitReq.input('userId', sql.Int, userId)
@@ -305,10 +346,12 @@ cashbookRouter.post('/entries', async (req, res) => {
       debitReq.input('mvno', sql.NVarChar(50), mvnoValue)
       debitReq.input('dno', sql.Int, dno)
       debitReq.input('bal', sql.NVarChar(50), String(debitBal))
-      debitReq.input('bizId', sql.Int, bizId)
+      if (companyInsertCol) debitReq.input('bizId', sql.Int, bizId)
       await debitReq.query(`
         INSERT INTO dbo.Leger (
-          Dated, UserId, Accid, VNo, Type, RefNo, Debit, Description, Timed, MVNo, DNo, Bal, BizId
+          Dated, UserId, Accid, VNo, Type, RefNo, Debit, Description, Timed, MVNo, DNo, Bal${
+            companyInsertCol ? `, ${companyInsertCol}` : ''
+          }
         ) VALUES (
           CAST(@dated AS date),
           @userId,
@@ -321,8 +364,7 @@ cashbookRouter.post('/entries', async (req, res) => {
           CAST(GETDATE() AS time),
           @mvno,
           @dno,
-          @bal,
-          @bizId
+          @bal${companyInsertCol ? ', @bizId' : ''}
         )
       `)
 
@@ -338,10 +380,12 @@ cashbookRouter.post('/entries', async (req, res) => {
       creditReq.input('mvno', sql.NVarChar(50), mvnoValue)
       creditReq.input('dno', sql.Int, dno)
       creditReq.input('bal', sql.NVarChar(50), String(creditBal))
-      creditReq.input('bizId', sql.Int, bizId)
+      if (companyInsertCol) creditReq.input('bizId', sql.Int, bizId)
       await creditReq.query(`
         INSERT INTO dbo.Leger (
-          Dated, UserId, Accid, VNo, Type, RefNo, Credit, Description, Timed, MVNo, DNo, Bal, BizId
+          Dated, UserId, Accid, VNo, Type, RefNo, Credit, Description, Timed, MVNo, DNo, Bal${
+            companyInsertCol ? `, ${companyInsertCol}` : ''
+          }
         ) VALUES (
           CAST(@dated AS date),
           @userId,
@@ -354,8 +398,7 @@ cashbookRouter.post('/entries', async (req, res) => {
           CAST(GETDATE() AS time),
           @mvno,
           @dno,
-          @bal,
-          @bizId
+          @bal${companyInsertCol ? ', @bizId' : ''}
         )
       `)
 
