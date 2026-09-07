@@ -13,6 +13,7 @@ import {
   clearPageCache,
   TX_PAGE_SIZE,
 } from './pageCache'
+import { notifyDataChanged, useLiveRefresh } from './liveRefresh'
 import { panel } from './styles'
 import {
   DeleteTxModal,
@@ -98,6 +99,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
   const [savingEdit, setSavingEdit] = useState(false)
 
   const skipSearchPageReset = useRef(true)
+  const loadSerial = useRef(0)
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -117,42 +119,56 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
       .catch(() => toast.error('Could not load customers'))
   }, [])
 
+  const applyTxPage = useCallback(
+    (data: { rows: TransactionRow[]; total: number; summary: TransactionSummary }) => {
+      setFetched(data.rows)
+      setTotal(data.total)
+      setSummary(data.summary)
+    },
+    [],
+  )
+
+  const refreshTx = useCallback(
+    async (silent: boolean, serial?: number) => {
+      const mine = serial ?? loadSerial.current
+      const cached = peekTransactions(params, page)
+      if (!silent && !cached) setLoading(true)
+      try {
+        const data = await loadTransactionsPage(params, page, { force: true })
+        if (mine !== loadSerial.current) return
+        applyTxPage(data)
+        if (!silent && page * TX_PAGE_SIZE < data.total) {
+          void loadTransactionsPage(params, page + 1, { force: true })
+        }
+      } catch (err) {
+        if (mine !== loadSerial.current || silent || cached) return
+        setFetched([])
+        setTotal(0)
+        setSummary(EMPTY_TX_SUMMARY)
+        toast.error(err instanceof Error ? err.message : 'Could not load transactions')
+      } finally {
+        if (mine === loadSerial.current && !silent) setLoading(false)
+      }
+    },
+    [params, page, applyTxPage],
+  )
+
   useEffect(() => {
-    let cancelled = false
+    const mine = ++loadSerial.current
     const cached = peekTransactions(params, page)
     if (cached) {
-      setFetched(cached.rows)
-      setTotal(cached.total)
-      setSummary(cached.summary)
+      applyTxPage(cached)
       setLoading(false)
     } else {
       setFetched([])
       setLoading(true)
     }
-    loadTransactionsPage(params, page)
-      .then((data) => {
-        if (cancelled) return
-        setFetched(data.rows)
-        setTotal(data.total)
-        setSummary(data.summary)
-        if (page * TX_PAGE_SIZE < data.total) {
-          void loadTransactionsPage(params, page + 1)
-        }
-      })
-      .catch((err) => {
-        if (cancelled || cached) return
-        setFetched([])
-        setTotal(0)
-        setSummary(EMPTY_TX_SUMMARY)
-        toast.error(err instanceof Error ? err.message : 'Could not load transactions')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [params, page])
+    void refreshTx(false, mine)
+  }, [params, page, applyTxPage, refreshTx])
+
+  useLiveRefresh(() => {
+    void refreshTx(true)
+  })
 
   const displayRows = useMemo(() => buildTransactionDisplayRows(fetched), [fetched])
   const voucherGroups = useMemo(() => groupByVoucher(displayRows), [displayRows])
@@ -203,20 +219,19 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
         type: editRow.ledgerType,
       })
       clearPageCache()
+      notifyDataChanged()
       setEditRow(null)
       setEditAccid('')
       setEditPassword('')
       toast.success(result.message || 'Account updated')
       const data = await loadTransactionsPage(params, page, { force: true })
-      setFetched(data.rows)
-      setTotal(data.total)
-      setSummary(data.summary)
+      applyTxPage(data)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not update account')
     } finally {
       setSavingEdit(false)
     }
-  }, [editRow, savingEdit, editPassword, editAccid, params, page])
+  }, [editRow, savingEdit, editPassword, editAccid, params, page, applyTxPage])
 
   const openPasswordStep = useCallback(() => {
     if (!deleteRow || deleting) return
@@ -240,21 +255,19 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
     setDeleting(true)
     try {
       const result = await deleteTransaction(trid, password)
-      clearPageCache()
+      notifyDataChanged()
       setDeleteRow(null)
       setDeleteStep('confirm')
       setAdminPassword('')
       toast.success(result.message || 'Debit and Credit entries deleted')
       const data = await loadTransactionsPage(params, page, { force: true })
-      setFetched(data.rows)
-      setTotal(data.total)
-      setSummary(data.summary)
+      applyTxPage(data)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not delete transaction')
     } finally {
       setDeleting(false)
     }
-  }, [deleteRow, deleting, adminPassword, voucherGroups, displayRows, params, page])
+  }, [deleteRow, deleting, adminPassword, voucherGroups, displayRows, params, page, applyTxPage])
 
   function goToPage(next: number) {
     setPage(next)

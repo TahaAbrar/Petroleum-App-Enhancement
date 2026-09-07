@@ -14,9 +14,25 @@ export type AuthSession = {
   redirectTo: string
 }
 
+function readStore(): string | null {
+  try {
+    const fromLocal = localStorage.getItem(AUTH_KEY)
+    if (fromLocal) return fromLocal
+    const fromSession = sessionStorage.getItem(AUTH_KEY)
+    if (fromSession) {
+      localStorage.setItem(AUTH_KEY, fromSession)
+      sessionStorage.removeItem(AUTH_KEY)
+      return fromSession
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 export function getSession(): AuthSession | null {
   try {
-    const raw = sessionStorage.getItem(AUTH_KEY)
+    const raw = readStore()
     if (!raw) return null
     return JSON.parse(raw) as AuthSession
   } catch {
@@ -33,11 +49,21 @@ export function getUserRole(): string | null {
 }
 
 export function setSession(session: AuthSession): void {
-  sessionStorage.setItem(AUTH_KEY, JSON.stringify(session))
+  localStorage.setItem(AUTH_KEY, JSON.stringify(session))
+  try {
+    sessionStorage.removeItem(AUTH_KEY)
+  } catch {
+    /* ignore */
+  }
 }
 
 export function clearSession(): void {
-  sessionStorage.removeItem(AUTH_KEY)
+  localStorage.removeItem(AUTH_KEY)
+  try {
+    sessionStorage.removeItem(AUTH_KEY)
+  } catch {
+    /* ignore */
+  }
 }
 
 /** @deprecated use setSession */

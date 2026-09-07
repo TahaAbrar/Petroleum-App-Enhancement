@@ -108,7 +108,7 @@ export function CustomerPortalTransactions({ homePath }: Props) {
               Group: {account?.groupName || '—'}
             </p>
           </div>
-          <div className="relative z-0 shrink-0 overflow-visible">
+          <div className="relative z-20 shrink-0 overflow-visible">
             <DateRangeFilter
               variant="pill"
               grouped

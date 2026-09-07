@@ -11,6 +11,18 @@ import {
 } from './security.js'
 import { env } from './config.js'
 
+const COOKIE_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000
+
+function setAuthCookie(res, token) {
+  res.cookie('fl_token', token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: env.cookieSecure,
+    maxAge: COOKIE_MAX_AGE_MS,
+    path: '/',
+  })
+}
+
 const loginSchema = z.object({
   username: z
     .string()
@@ -103,13 +115,7 @@ export async function loginHandler(req, res) {
       role,
     })
 
-    res.cookie('fl_token', token, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: env.cookieSecure,
-      maxAge: 8 * 60 * 60 * 1000,
-      path: '/',
-    })
+    setAuthCookie(res, token)
 
     return res.json({
       ok: true,
@@ -158,13 +164,7 @@ export async function loginHandler(req, res) {
     name: displayName,
   })
 
-  res.cookie('fl_token', token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: env.cookieSecure,
-    maxAge: 8 * 60 * 60 * 1000,
-    path: '/',
-  })
+  setAuthCookie(res, token)
 
   return res.json({
     ok: true,
