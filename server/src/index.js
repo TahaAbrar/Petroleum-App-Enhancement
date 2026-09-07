@@ -15,6 +15,8 @@ import { coaRouter } from './coaRoutes.js'
 import { reportsRouter } from './reportsRoutes.js'
 import { portalRouter } from './portalRoutes.js'
 import { cashbookRouter } from './cashbookRoutes.js'
+import { pushRouter } from './pushRoutes.js'
+import { startPushWatcher } from './push.js'
 
 const app = express()
 
@@ -168,6 +170,15 @@ app.use(
   cashbookRouter,
 )
 
+app.use(
+  '/api/push',
+  transactionLimiter,
+  requireReadKey,
+  requireAuth,
+  requireRoles('Administrator', 'Accountant'),
+  pushRouter,
+)
+
 app.all(/^\/api\/.*/, (_req, res) => {
   res.status(404).json({ ok: false, message: 'Not found' })
 })
@@ -189,6 +200,7 @@ async function start() {
   }
   app.listen(env.port, () => {
     console.log(`[fuelledger-api] listening on :${env.port} (SELECT-only auth + customers + transactions)`)
+    startPushWatcher()
   })
 }
 

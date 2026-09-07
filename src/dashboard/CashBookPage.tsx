@@ -19,6 +19,7 @@ import { filterCashbookEntries } from './cashbookPrint'
 import { FALLBACK_COMPANY, loadCompany, peekCompany, type CompanyProfile } from './company'
 import { applyDateRange, DateRangeFilter } from './filters'
 import { LoadingHint } from './loading'
+import { notifyDataChanged } from './liveRefresh'
 import { panel } from './styles'
 
 type Props = {
@@ -267,6 +268,7 @@ export function CashBookPage({ homePath }: Props) {
       setAccounts(refreshed)
       resetPartyFields(true)
       toast.success(`Saved voucher #${result.voucher.vno}`)
+      notifyDataChanged()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not save entry')
     } finally {

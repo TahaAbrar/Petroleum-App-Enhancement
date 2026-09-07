@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { BrandMark } from '../components/BrandMark'
 import { apiLogout, getSession } from '../lib/auth'
+import { disablePush, enablePush } from '../lib/push'
 import { toast } from '../toast'
 import type { DashboardConfig } from './types'
 import { BottomIcon, NavIcon } from './icons'
@@ -104,6 +105,13 @@ export function DashboardShell({ config }: Props) {
   }, [])
 
   useEffect(() => {
+    if (isCustomerPortal) return
+    void enablePush().catch(() => {
+      /* permission denied or unsupported */
+    })
+  }, [isCustomerPortal])
+
+  useEffect(() => {
     if (!mobileMenuOpen && !companyCardOpen) return
 
     function onPointerDown(event: MouseEvent | TouchEvent) {
@@ -165,6 +173,9 @@ export function DashboardShell({ config }: Props) {
     if (loggingOut) return
     setLoggingOut(true)
     try {
+      await disablePush().catch(() => {
+        /* still log out */
+      })
       await apiLogout()
       clearPageCache()
       setLogoutConfirmOpen(false)

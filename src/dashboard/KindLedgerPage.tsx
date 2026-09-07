@@ -12,6 +12,7 @@ import {
   TX_CHUNK,
   TX_PAGE_SIZE,
 } from './pageCache'
+import { useLiveRefresh } from './liveRefresh'
 import { panel } from './styles'
 import { PkrCell, PkrValue } from './customerDetails/ui'
 import {
@@ -77,6 +78,7 @@ export function KindLedgerPage({ homePath, kind, title, subtitle, searchQuery = 
   const mobileSentinelRef = useRef<HTMLDivElement | null>(null)
   const desktopSentinelRef = useRef<HTMLDivElement | null>(null)
   const skipSearchPageReset = useRef(true)
+  const loadSerial = useRef(0)
 
   const isCredit = kind === 'credit'
   const amountTone = isCredit ? 'text-credit' : 'text-debit'
@@ -103,26 +105,45 @@ export function KindLedgerPage({ homePath, kind, title, subtitle, searchQuery = 
       .catch(() => toast.error('Could not load customers'))
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
-    setStatsLoading(true)
-    fetchKindStats(kind)
-      .then((stats) => {
-        if (!cancelled) setKindStats(stats)
-      })
-      .catch(() => {
-        if (!cancelled) setKindStats(EMPTY_KIND_STATS)
-      })
-      .finally(() => {
-        if (!cancelled) setStatsLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [kind])
+  const refreshKind = useCallback(
+    async (silent: boolean, serial?: number) => {
+      const mine = serial ?? loadSerial.current
+      const cached = peekTransactions(params, page)
+      if (!silent && !cached) setLoading(true)
+      try {
+        const [data, stats] = await Promise.all([
+          loadTransactionsPage(params, page, { force: true }),
+          fetchKindStats(kind),
+        ])
+        if (mine !== loadSerial.current) return
+        setFetched(data.rows)
+        setTotal(data.total)
+        setVisible((v) =>
+          silent
+            ? Math.min(Math.max(v, TX_CHUNK), data.rows.length)
+            : Math.min(TX_CHUNK, data.rows.length),
+        )
+        setKindStats(stats)
+        if (!silent && data.rows.length === TX_PAGE_SIZE && page * TX_PAGE_SIZE < data.total) {
+          void loadTransactionsPage(params, page + 1, { force: true })
+        }
+      } catch (err) {
+        if (mine !== loadSerial.current || silent || cached) return
+        setFetched([])
+        setTotal(0)
+        toast.error(err instanceof Error ? err.message : `Could not load ${title.toLowerCase()} records`)
+      } finally {
+        if (mine === loadSerial.current && !silent) {
+          setLoading(false)
+          setStatsLoading(false)
+        }
+      }
+    },
+    [params, page, kind, title],
+  )
 
   useEffect(() => {
-    let cancelled = false
+    const mine = ++loadSerial.current
     const cached = peekTransactions(params, page)
     if (cached) {
       setFetched(cached.rows)
@@ -134,29 +155,13 @@ export function KindLedgerPage({ homePath, kind, title, subtitle, searchQuery = 
       setVisible(TX_CHUNK)
       setLoading(true)
     }
-    loadTransactionsPage(params, page)
-      .then((data) => {
-        if (cancelled) return
-        setFetched(data.rows)
-        setTotal(data.total)
-        setVisible(Math.min(TX_CHUNK, data.rows.length))
-        if (data.rows.length === TX_PAGE_SIZE && page * TX_PAGE_SIZE < data.total) {
-          void loadTransactionsPage(params, page + 1)
-        }
-      })
-      .catch((err) => {
-        if (cancelled || cached) return
-        setFetched([])
-        setTotal(0)
-        toast.error(err instanceof Error ? err.message : `Could not load ${title.toLowerCase()} records`)
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [params, page, title])
+    setStatsLoading(true)
+    void refreshKind(false, mine)
+  }, [params, page, refreshKind])
+
+  useLiveRefresh(() => {
+    void refreshKind(true)
+  })
 
   const rows = fetched.slice(0, Math.min(visible, fetched.length))
   const hasMore = visible < fetched.length

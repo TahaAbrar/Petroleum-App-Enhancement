@@ -37,7 +37,10 @@ export const env = {
     connectionTimeout: Number(process.env.DB_CONNECTION_TIMEOUT || 20000),
   },
   jwtSecret: required('JWT_SECRET'),
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '8h',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '365d',
+  vapidPublicKey: (process.env.VAPID_PUBLIC_KEY || '').trim(),
+  vapidPrivateKey: (process.env.VAPID_PRIVATE_KEY || '').trim(),
+  vapidSubject: (process.env.VAPID_SUBJECT || 'mailto:admin@alicomz.com').trim(),
   loginMaxAttempts: Number(process.env.LOGIN_MAX_ATTEMPTS || 5),
   loginLockMinutes: Number(process.env.LOGIN_LOCK_MINUTES || 15),
   corsOrigin: (process.env.CORS_ORIGIN || 'http://localhost:5173')
