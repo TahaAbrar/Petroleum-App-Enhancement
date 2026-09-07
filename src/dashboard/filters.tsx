@@ -193,7 +193,7 @@ function DatePill({
   }
 
   return (
-    <div ref={rootRef} className={`relative ${fullWidth ? 'flex-1' : ''} ${open ? 'z-30' : 'z-0'}`}>
+    <div ref={rootRef} className={`relative ${fullWidth ? 'flex-1' : ''} ${open ? 'z-[120]' : 'z-0'}`}>
       <div className={`${boxClass(variant, fullWidth)} ${fullWidth ? 'w-full' : ''}`}>
         <button
           type="button"
@@ -233,7 +233,7 @@ function DatePill({
         <div
           role="dialog"
           aria-label={`${label} calendar`}
-          className={`absolute top-[calc(100%+6px)] z-30 w-[min(17.5rem,calc(100vw-1.5rem))] rounded-2xl border border-line bg-white p-3 shadow-[0_12px_32px_rgba(26,29,33,0.14)] ${
+          className={`absolute top-[calc(100%+6px)] z-[130] w-[min(17.5rem,calc(100vw-1.5rem))] rounded-2xl border border-line bg-white p-3 shadow-[0_12px_32px_rgba(26,29,33,0.14)] ${
             alignEnd ? 'right-0 left-auto' : 'left-0'
           }`}
         >
@@ -343,7 +343,7 @@ export function MenuFilter({
   }, [open])
 
   return (
-    <div ref={rootRef} className={`${boxClass(variant, fullWidth)} ${open ? 'z-30' : ''}`}>
+    <div ref={rootRef} className={`${boxClass(variant, fullWidth)} ${open ? 'z-[120]' : ''}`}>
       <button
         type="button"
         className="absolute inset-0 z-[1] cursor-pointer rounded-[inherit] border-0 bg-transparent"
@@ -362,7 +362,7 @@ export function MenuFilter({
       {open ? (
         <ul
           role="listbox"
-          className="absolute top-[calc(100%+6px)] right-0 left-0 z-30 max-h-64 min-w-full w-max max-w-[18rem] overflow-auto rounded-2xl border border-line bg-white py-1.5 shadow-[0_12px_32px_rgba(26,29,33,0.14)]"
+          className="absolute top-[calc(100%+6px)] right-0 left-0 z-[130] max-h-64 min-w-full w-max max-w-[18rem] overflow-auto rounded-2xl border border-line bg-white py-1.5 shadow-[0_12px_32px_rgba(26,29,33,0.14)]"
         >
           {options.map((opt) => {
             const active = opt.value === value
@@ -413,7 +413,11 @@ export function SearchableCustomerFilter({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return customers
-    return customers.filter((row) => row.name.toLowerCase().includes(q))
+    return customers.filter(
+      (row) =>
+        row.name.toLowerCase().includes(q) ||
+        String(row.accid).includes(q),
+    )
   }, [customers, query])
 
   useEffect(() => {
@@ -438,31 +442,44 @@ export function SearchableCustomerFilter({
   }, [open])
 
   return (
-    <div ref={rootRef} className={`${variants.boxFull} ${open ? 'z-30' : ''}`}>
-      <button
-        type="button"
-        className="absolute inset-0 z-[1] cursor-pointer rounded-[inherit] border-0 bg-transparent"
-        aria-label={ariaLabel}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        onClick={() => setOpen((current) => !current)}
-      />
+    <div ref={rootRef} className={`${variants.boxFull} ${open ? 'z-[120]' : ''}`}>
+      {!open ? (
+        <button
+          type="button"
+          className="absolute inset-0 z-[1] cursor-pointer rounded-[inherit] border-0 bg-transparent"
+          aria-label={ariaLabel}
+          aria-expanded={false}
+          aria-haspopup="listbox"
+          onClick={() => setOpen(true)}
+        />
+      ) : null}
       <CustomerIcon />
       <span className={`relative z-0 min-w-0 flex-1 truncate ${value ? 'text-ink' : 'text-muted'}`}>
         {label}
       </span>
-      <span className={`relative z-0 ${open ? 'rotate-180' : ''} transition-transform`}>
-        <ChevronIcon />
-      </span>
+      <button
+        type="button"
+        className="relative z-[2] cursor-pointer border-0 bg-transparent p-0"
+        aria-label={open ? 'Close customer list' : 'Open customer list'}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className={`${open ? 'rotate-180' : ''} block transition-transform`}>
+          <ChevronIcon />
+        </span>
+      </button>
       {open ? (
-        <div className="absolute top-[calc(100%+6px)] right-0 left-0 z-30 min-w-full overflow-hidden rounded-2xl border border-line bg-white shadow-[0_12px_32px_rgba(26,29,33,0.14)]">
+        <div
+          className="absolute top-[calc(100%+6px)] right-0 left-0 z-[130] min-w-full overflow-hidden rounded-2xl border border-line bg-white shadow-[0_12px_32px_rgba(26,29,33,0.14)]"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
           <div className="border-b border-line p-2">
             <input
               ref={inputRef}
-              type="search"
+              type="text"
               value={query}
               placeholder="Search customer..."
               aria-label="Search customers"
+              autoComplete="off"
               className="w-full rounded-xl border border-line bg-[#fafbfc] px-3 py-2 text-[0.8rem] font-semibold text-ink outline-none focus:border-fuel"
               onClick={(e) => e.stopPropagation()}
               onChange={(e) => setQuery(e.target.value)}

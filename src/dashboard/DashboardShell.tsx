@@ -87,7 +87,13 @@ export function DashboardShell({ config }: Props) {
   const initial = displayName.charAt(0).toUpperCase()
   const showSection = active !== 'dashboard'
   const isCustomers = active === 'customers'
+  const hideHeaderSearch =
+    active === 'transactions' || active === 'credit' || active === 'debit'
   const shortAddress = truncateAddress(company.address)
+
+  useEffect(() => {
+    if (hideHeaderSearch) setQuery('')
+  }, [hideHeaderSearch])
 
   useEffect(() => {
     let cancelled = false
@@ -346,19 +352,23 @@ export function DashboardShell({ config }: Props) {
         </header>
 
         <header className="sticky top-0 z-40 hidden items-center gap-4 border-b border-transparent bg-surface/90 px-6 py-3.5 backdrop-blur-[10px] lg:grid lg:grid-cols-[1fr_auto]">
-          <label className="mx-auto flex w-full max-w-[520px] items-center gap-2 rounded-full border border-line bg-white px-4 py-2.5 text-muted shadow-[0_2px_10px_rgba(26,29,33,0.03)]">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.7" />
-              <path d="m16 16 4 4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-            </svg>
-            <input
-              type="search"
-              placeholder={isCustomers ? 'Search accounts...' : 'Search here...'}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="w-full border-0 bg-transparent text-[0.9rem] text-ink outline-none"
-            />
-          </label>
+          {hideHeaderSearch ? (
+            <div />
+          ) : (
+            <label className="mx-auto flex w-full max-w-[520px] items-center gap-2 rounded-full border border-line bg-white px-4 py-2.5 text-muted shadow-[0_2px_10px_rgba(26,29,33,0.03)]">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.7" />
+                <path d="m16 16 4 4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              </svg>
+              <input
+                type="search"
+                placeholder={isCustomers ? 'Search accounts...' : 'Search here...'}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="w-full border-0 bg-transparent text-[0.9rem] text-ink outline-none"
+              />
+            </label>
+          )}
           <div className="flex items-center justify-end gap-3">
             <div
               ref={desktopMenuRef}
@@ -424,11 +434,11 @@ export function DashboardShell({ config }: Props) {
               txPath={txPath}
             />
           ) : active === 'transactions' ? (
-            <TransactionsPage homePath={homePath} searchQuery={query} />
+            <TransactionsPage homePath={homePath} />
           ) : active === 'credit' ? (
-            <CreditPage homePath={homePath} txPath={txPath} searchQuery={query} />
+            <CreditPage homePath={homePath} txPath={txPath} />
           ) : active === 'debit' ? (
-            <DebitPage homePath={homePath} txPath={txPath} searchQuery={query} />
+            <DebitPage homePath={homePath} txPath={txPath} />
           ) : active === 'cashbook' ? (
             <CashBookPage homePath={homePath} />
           ) : active === 'reports' ? (

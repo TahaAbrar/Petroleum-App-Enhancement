@@ -231,20 +231,20 @@ export function KindLedgerPage({ homePath, kind, title, subtitle, searchQuery = 
       </div>
 
       <section
-        className={`${panel} relative z-0 overflow-visible rounded-2xl p-4 lg:p-5`}
+        className={`${panel} relative z-30 overflow-visible rounded-2xl p-4 lg:p-5`}
         aria-label="Filters"
       >
-        <div className="relative z-0 grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2">
-          <label className="flex min-w-0 flex-col gap-1.5 overflow-visible">
+        <div className="relative z-30 grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2">
+          <div className="relative z-30 flex min-w-0 flex-col gap-1.5 overflow-visible">
             <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">Customer</span>
             <SearchableCustomerFilter
               value={draft.accid}
               customers={customers}
               onChange={(next) => setDraft((current) => ({ ...current, accid: next }))}
             />
-          </label>
+          </div>
 
-          <label className="flex min-w-0 flex-col gap-1.5 overflow-visible">
+          <div className="relative z-20 flex min-w-0 flex-col gap-1.5 overflow-visible">
             <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">Date Range</span>
             <DateRangeFilter
               grouped
@@ -260,7 +260,7 @@ export function KindLedgerPage({ homePath, kind, title, subtitle, searchQuery = 
                 setDraft((current) => ({ ...current, dateFrom: range.from, dateTo: range.to }))
               }}
             />
-          </label>
+          </div>
         </div>
       </section>
 

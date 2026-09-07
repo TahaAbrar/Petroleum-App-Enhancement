@@ -19,13 +19,16 @@ import { LoadingHint } from './loading'
 import { MobileSearchField } from './MobileSearchField'
 import {
   EMPTY_TX_FILTERS,
+  loadTransactionCustomers,
   loadTransactionsPage,
+  peekTransactionCustomers,
   peekTransactions,
   clearPageCache,
 } from './pageCache'
 import { panel, selectBtn } from './styles'
 import {
   DeleteTxModal,
+  EditAccidModal,
   MobileVoucherCard,
   TxLedgerRow,
   TxTableColgroup,
@@ -36,6 +39,8 @@ import {
   deleteTransaction,
   groupByVoucher,
   realDeleteTrid,
+  updateTransactionAccid,
+  type TransactionCustomer,
   type TransactionRow,
 } from './transactions'
 
@@ -75,6 +80,13 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
   const [deleteStep, setDeleteStep] = useState<'confirm' | 'password'>('confirm')
   const [adminPassword, setAdminPassword] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const [editRow, setEditRow] = useState<TransactionRow | null>(null)
+  const [editAccid, setEditAccid] = useState('')
+  const [editPassword, setEditPassword] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [accounts, setAccounts] = useState<TransactionCustomer[]>(
+    () => peekTransactionCustomers() ?? [],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -101,6 +113,12 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
     return () => {
       cancelled = true
     }
+  }, [])
+
+  useEffect(() => {
+    loadTransactionCustomers()
+      .then(setAccounts)
+      .catch(() => toast.error('Could not load accounts'))
   }, [])
 
   useEffect(() => {
@@ -189,6 +207,50 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
     setDeleteStep('confirm')
     setAdminPassword('')
   }, [])
+
+  const requestEdit = useCallback((row: TransactionRow) => {
+    setEditRow(row)
+    setEditAccid('')
+    setEditPassword('')
+  }, [])
+
+  const closeEditModal = useCallback(() => {
+    if (savingEdit) return
+    setEditRow(null)
+    setEditAccid('')
+    setEditPassword('')
+  }, [savingEdit])
+
+  const confirmEdit = useCallback(async () => {
+    if (!editRow || savingEdit) return
+    const password = editPassword.trim()
+    const newAccid = Number(editAccid)
+    if (!password || !Number.isFinite(newAccid) || newAccid <= 0) {
+      toast.error('Enter Accid and admin password')
+      return
+    }
+    setSavingEdit(true)
+    try {
+      const result = await updateTransactionAccid({
+        trid: editRow.trid,
+        newAccid,
+        password,
+        vno: Number(editRow.vno),
+        type: editRow.ledgerType,
+      })
+      clearPageCache()
+      setEditRow(null)
+      setEditAccid('')
+      setEditPassword('')
+      toast.success(result.message || 'Account updated')
+      const data = await loadTransactionsPage(EMPTY_TX_FILTERS, 1, { force: true })
+      setRows(data.rows)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update account')
+    } finally {
+      setSavingEdit(false)
+    }
+  }, [editRow, savingEdit, editPassword, editAccid])
 
   const openPasswordStep = useCallback(() => {
     if (!deleteRow || deleting) return
@@ -430,6 +492,7 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
                   canView={canViewCustomer}
                   canDelete={canDelete}
                   onView={openCustomer}
+                  onEdit={requestEdit}
                   onDelete={requestDelete}
                 />
               ))}
@@ -450,6 +513,7 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
                         canView={canViewCustomer}
                         canDelete={canDelete}
                         onView={openCustomer}
+                        onEdit={requestEdit}
                         onDelete={requestDelete}
                       />
                     )),
@@ -475,6 +539,22 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
           }}
           onContinue={openPasswordStep}
           onConfirm={() => void confirmDelete()}
+        />
+      ) : null}
+
+      {editRow ? (
+        <EditAccidModal
+          currentAccid={editRow.accid}
+          vno={editRow.vno}
+          type={editRow.ledgerType}
+          accounts={accounts}
+          newAccid={editAccid}
+          password={editPassword}
+          saving={savingEdit}
+          onAccidChange={setEditAccid}
+          onPasswordChange={setEditPassword}
+          onClose={closeEditModal}
+          onConfirm={() => void confirmEdit()}
         />
       ) : null}
     </>

@@ -202,7 +202,7 @@ export async function fetchTransactions(
   search.set('kind', params.kind ?? 'all')
   search.set('sort', params.sort ?? 'oldest')
   search.set('page', String(params.page ?? 1))
-  search.set('pageSize', String(params.pageSize ?? 50))
+  search.set('pageSize', String(params.pageSize ?? 20))
   const data = await apiGet<ListResponse>(`/api/transactions?${search.toString()}`, { signal })
   return {
     ...data,
@@ -241,6 +241,14 @@ export async function deleteTransaction(
     { trid, password },
     { signal },
   )
+}
+
+/** Change Accid on one Leger row (scoped by Trid + VNo + Type). Admin password required. */
+export async function updateTransactionAccid(
+  body: { trid: number; newAccid: number; password: string; vno: number; type: string },
+  signal?: AbortSignal,
+) {
+  return apiPost<{ ok: true; message: string }>('/api/transactions/edit-accid', body, { signal })
 }
 
 /** Prefer a real Leger Trid (guards against any leftover negative display ids). */

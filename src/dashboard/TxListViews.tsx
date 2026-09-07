@@ -1,5 +1,10 @@
-import type { ReactNode, Ref } from 'react'
-import { formatTxDate, ledgerAmount, type TransactionRow } from './transactions'
+import { useState, type ReactNode, type Ref } from 'react'
+import {
+  formatTxDate,
+  ledgerAmount,
+  type TransactionCustomer,
+  type TransactionRow,
+} from './transactions'
 import { panel } from './styles'
 
 export function MobileVoucherCard({
@@ -8,6 +13,7 @@ export function MobileVoucherCard({
   canView,
   canDelete,
   onView,
+  onEdit,
   onDelete,
 }: {
   group: { key: string; rows: TransactionRow[] }
@@ -15,6 +21,7 @@ export function MobileVoucherCard({
   canView: boolean
   canDelete: boolean
   onView: (row: TransactionRow) => void
+  onEdit: (row: TransactionRow) => void
   onDelete: (row: TransactionRow) => void
 }) {
   return (
@@ -60,7 +67,15 @@ export function MobileVoucherCard({
               </div>
             </div>
             {canDelete ? (
-              <div className="mt-2 flex justify-end">
+              <div className="mt-2 flex justify-end gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onEdit(row)}
+                  className="inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border-0 bg-[#FFF8E1] text-[#B8860B] hover:brightness-95"
+                  aria-label="Edit account"
+                >
+                  <EditIcon />
+                </button>
                 <button
                   type="button"
                   onClick={() => onDelete(row)}
@@ -119,6 +134,7 @@ export function TxLedgerRow({
   canView,
   canDelete,
   onView,
+  onEdit,
   onDelete,
   rowRef,
 }: {
@@ -128,6 +144,7 @@ export function TxLedgerRow({
   canView: boolean
   canDelete: boolean
   onView: (row: TransactionRow) => void
+  onEdit: (row: TransactionRow) => void
   onDelete: (row: TransactionRow) => void
   rowRef?: Ref<HTMLTableRowElement>
 }) {
@@ -173,14 +190,24 @@ export function TxLedgerRow({
       <Td className="text-right font-bold text-ink">{ledgerAmount(row.balance)}</Td>
       {canDelete ? (
         <Td className="text-center">
-          <button
-            type="button"
-            onClick={() => onDelete(row)}
-            className="inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border-0 bg-debit-bg text-debit hover:brightness-95"
-            aria-label="Delete transaction"
-          >
-            <DeleteIcon />
-          </button>
+          <div className="inline-flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => onEdit(row)}
+              className="inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border-0 bg-[#FFF8E1] text-[#B8860B] hover:brightness-95"
+              aria-label="Edit account"
+            >
+              <EditIcon />
+            </button>
+            <button
+              type="button"
+              onClick={() => onDelete(row)}
+              className="inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border-0 bg-debit-bg text-debit hover:brightness-95"
+              aria-label="Delete transaction"
+            >
+              <DeleteIcon />
+            </button>
+          </div>
         </Td>
       ) : null}
     </tr>
@@ -310,6 +337,188 @@ export function DeleteTxModal({
         </div>
       )}
     </div>
+  )
+}
+
+export function EditAccidModal({
+  currentAccid,
+  vno,
+  type,
+  accounts,
+  newAccid,
+  password,
+  saving,
+  onAccidChange,
+  onPasswordChange,
+  onClose,
+  onConfirm,
+}: {
+  currentAccid: number
+  vno: string
+  type: string
+  accounts: TransactionCustomer[]
+  newAccid: string
+  password: string
+  saving: boolean
+  onAccidChange: (value: string) => void
+  onPasswordChange: (value: string) => void
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const selected = accounts.find((row) => String(row.accid) === newAccid)
+  const current = accounts.find((row) => row.accid === currentAccid)
+  const q = query.trim().toLowerCase()
+  const filtered = !q
+    ? accounts
+    : accounts.filter(
+        (row) => row.name.toLowerCase().includes(q) || String(row.accid).includes(q),
+      )
+  const field =
+    'rounded-xl border border-line bg-[#f7f8fa] px-3.5 py-2.5 text-[0.9rem] font-semibold text-ink'
+  const labelCls = 'mb-1.5 block text-[0.75rem] font-bold uppercase tracking-[0.04em] text-muted'
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="presentation">
+      <button
+        type="button"
+        className="absolute inset-0 border-0 bg-ink/45 backdrop-blur-[2px]"
+        aria-label="Close edit modal"
+        disabled={saving}
+        onClick={onClose}
+      />
+      <form
+        autoComplete="off"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tx-edit-accid-title"
+        className="relative z-10 w-full max-w-[22rem] rounded-2xl border border-line bg-white p-5 shadow-[0_20px_50px_rgba(26,29,33,0.2)] animate-rise"
+        onSubmit={(e) => {
+          e.preventDefault()
+          onConfirm()
+        }}
+      >
+        <h2 id="tx-edit-accid-title" className="m-0 text-[1.1rem] font-extrabold tracking-[-0.02em] text-ink">
+          Edit Account
+        </h2>
+        <div className="mt-4 grid grid-cols-2 gap-2.5">
+          <div>
+            <span className={labelCls}>V.No</span>
+            <p className={`m-0 ${field}`}>{vno || '—'}</p>
+          </div>
+          <div>
+            <span className={labelCls}>Type</span>
+            <p className={`m-0 ${field}`}>{type || '—'}</p>
+          </div>
+        </div>
+        <div className="mt-3">
+          <span className={labelCls}>Current Accid</span>
+          <p className={`m-0 ${field}`}>
+            {current ? `${current.name} (${current.accid})` : currentAccid || '—'}
+          </p>
+        </div>
+        <div className={`mt-3 ${open ? 'relative z-20' : ''}`}>
+          <span className={labelCls}>New Account</span>
+          <button
+            type="button"
+            disabled={saving}
+            aria-expanded={open}
+            onClick={() => {
+              setQuery('')
+              setOpen((v) => !v)
+            }}
+            className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl border border-line bg-white px-3.5 py-2.5 text-left text-[0.9rem] font-medium text-ink disabled:opacity-60"
+          >
+            <span className={`min-w-0 truncate ${selected ? 'text-ink' : 'text-muted'}`}>
+              {selected ? `${selected.name} (${selected.accid})` : 'Select account…'}
+            </span>
+            <span className="shrink-0 text-muted">{open ? '▴' : '▾'}</span>
+          </button>
+          {open && !saving ? (
+            <div className="absolute top-[calc(100%+6px)] right-0 left-0 z-30 overflow-hidden rounded-2xl border border-line bg-white shadow-[0_12px_32px_rgba(26,29,33,0.14)]">
+              <div className="border-b border-line p-2">
+                <input
+                  type="search"
+                  autoComplete="off"
+                  value={query}
+                  placeholder="Search name or Accid…"
+                  className="w-full rounded-xl border border-line bg-[#fafbfc] px-3 py-2 text-[0.8rem] font-semibold text-ink outline-none focus:border-fuel"
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </div>
+              <ul className="max-h-52 overflow-auto py-1.5">
+                {filtered.map((row) => (
+                  <li key={row.accid}>
+                    <button
+                      type="button"
+                      className={`flex w-full cursor-pointer border-0 px-3 py-2 text-left text-[0.8rem] font-semibold ${
+                        String(row.accid) === newAccid
+                          ? 'bg-[#fff6d6] text-ink'
+                          : 'bg-transparent text-ink hover:bg-[#f7f8fa]'
+                      }`}
+                      onClick={() => {
+                        onAccidChange(String(row.accid))
+                        setOpen(false)
+                        setQuery('')
+                      }}
+                    >
+                      {row.name} ({row.accid})
+                    </button>
+                  </li>
+                ))}
+                {filtered.length === 0 ? (
+                  <li className="px-3 py-2 text-[0.78rem] font-medium text-muted">No accounts found.</li>
+                ) : null}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+        <label className="mt-3 block">
+          <span className={labelCls}>Administrator Password</span>
+          <input
+            type="text"
+            autoComplete="off"
+            value={password}
+            disabled={saving}
+            onChange={(e) => onPasswordChange(e.target.value)}
+            className="box-border w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-[0.9rem] font-medium text-ink outline-none focus:border-fuel disabled:opacity-60 [-webkit-text-security:disc]"
+            placeholder="Administrator password"
+          />
+        </label>
+        <div className="mt-5 flex items-center justify-end gap-2.5">
+          <button
+            type="button"
+            disabled={saving}
+            onClick={onClose}
+            className="cursor-pointer rounded-xl border border-line bg-white px-4 py-2.5 text-[0.85rem] font-bold text-ink hover:bg-[#f7f8fa] disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={saving || !newAccid.trim() || !password.trim()}
+            className="cursor-pointer rounded-xl border-0 bg-fuel px-4 py-2.5 text-[0.85rem] font-bold text-ink disabled:opacity-60"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+export function EditIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4 20h4l10.5-10.5a1.5 1.5 0 0 0-2.12-2.12L5.88 17.88 4 20ZM14.5 6.5l3 3"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   )
 }
 
