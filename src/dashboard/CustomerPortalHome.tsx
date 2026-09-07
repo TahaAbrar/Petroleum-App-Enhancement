@@ -282,7 +282,7 @@ export function CustomerPortalHome({ txPath, groupsPath = '/customer/groups' }: 
       <section className="relative z-0 flex flex-col gap-2.5 overflow-visible" aria-label="Fuel summary">
         <div className="relative z-0 flex flex-col gap-2 overflow-visible sm:flex-row sm:items-center sm:justify-between">
           <h3 className="m-0 text-[1rem] font-extrabold text-ink">Summary</h3>
-          <div className="relative z-0 shrink-0 overflow-visible">
+          <div className="relative z-20 shrink-0 overflow-visible">
             <DateRangeFilter
               variant="pill"
               grouped

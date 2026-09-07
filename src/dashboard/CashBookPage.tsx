@@ -19,6 +19,7 @@ import { filterCashbookEntries } from './cashbookPrint'
 import { FALLBACK_COMPANY, loadCompany, peekCompany, type CompanyProfile } from './company'
 import { applyDateRange, DateRangeFilter } from './filters'
 import { LoadingHint } from './loading'
+import { notifyDataChanged } from './liveRefresh'
 import { panel } from './styles'
 
 type Props = {
@@ -267,6 +268,7 @@ export function CashBookPage({ homePath }: Props) {
       setAccounts(refreshed)
       resetPartyFields(true)
       toast.success(`Saved voucher #${result.voucher.vno}`)
+      notifyDataChanged()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not save entry')
     } finally {
@@ -405,7 +407,7 @@ export function CashBookPage({ homePath }: Props) {
         <LoadingHint label="Loading cash book…" />
       ) : (
         <>
-        <section className={`${panel} relative z-0 overflow-visible rounded-2xl p-4 lg:p-5`} aria-label="Cash book form">
+        <section className={`${panel} relative z-20 overflow-visible rounded-2xl p-4 lg:p-5`} aria-label="Cash book form">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3">
             <div className="flex items-center gap-2">
               <span className="grid size-9 place-items-center rounded-xl bg-fuel-soft text-[#c99700]">
@@ -525,7 +527,7 @@ export function CashBookPage({ homePath }: Props) {
                 Filter this table by date
               </p>
             </div>
-            <div className="relative z-10 flex flex-wrap items-center gap-2">
+            <div className="relative z-20 flex flex-wrap items-center gap-2">
               <DateRangeFilter
                 from={dateFrom}
                 to={dateTo}
@@ -704,7 +706,7 @@ function MenuSelect({
   }, [open])
 
   return (
-    <div ref={rootRef} className={`relative ${open ? 'z-30' : ''}`}>
+    <div ref={rootRef} className={`relative ${open ? 'z-[80]' : ''}`}>
       <button
         type="button"
         data-cb-field={fieldId}
@@ -727,7 +729,7 @@ function MenuSelect({
       {open ? (
         <ul
           role="listbox"
-          className="absolute top-[calc(100%+6px)] right-0 left-0 z-30 max-h-64 overflow-auto rounded-2xl border border-line bg-white py-1.5 shadow-[0_12px_32px_rgba(26,29,33,0.14)]"
+          className="absolute top-[calc(100%+6px)] right-0 left-0 z-[80] max-h-64 overflow-auto rounded-2xl border border-line bg-white py-1.5 shadow-[0_12px_32px_rgba(26,29,33,0.14)]"
         >
           {options.map((opt) => {
             const active = opt.value === value
@@ -803,7 +805,7 @@ function RefSelect({
   }, [open, disabled])
 
   return (
-    <div ref={rootRef} className={`relative ${open && !disabled ? 'z-30' : ''}`}>
+    <div ref={rootRef} className={`relative ${open && !disabled ? 'z-[80]' : ''}`}>
       <button
         type="button"
         data-cb-field={fieldId}
@@ -830,7 +832,7 @@ function RefSelect({
         <Chevron open={open} />
       </button>
       {open && !disabled ? (
-        <div className="absolute top-[calc(100%+6px)] left-0 z-30 w-[9.5rem] overflow-hidden rounded-2xl border border-line bg-white shadow-[0_12px_32px_rgba(26,29,33,0.14)]">
+        <div className="absolute top-[calc(100%+6px)] left-0 z-[80] w-[9.5rem] overflow-hidden rounded-2xl border border-line bg-white shadow-[0_12px_32px_rgba(26,29,33,0.14)]">
           <div className="border-b border-line p-2">
             <input
               ref={inputRef}
@@ -929,7 +931,7 @@ function AccountSelect({
   }, [open, disabled])
 
   return (
-    <div ref={rootRef} className={`relative ${open && !disabled ? 'z-30' : ''}`}>
+    <div ref={rootRef} className={`relative ${open && !disabled ? 'z-[80]' : ''}`}>
       <button
         type="button"
         data-cb-field={fieldId}
@@ -953,7 +955,7 @@ function AccountSelect({
         <Chevron open={open} />
       </button>
       {open && !disabled ? (
-        <div className="absolute top-[calc(100%+6px)] right-0 left-0 z-30 overflow-hidden rounded-2xl border border-line bg-white shadow-[0_12px_32px_rgba(26,29,33,0.14)]">
+        <div className="absolute top-[calc(100%+6px)] right-0 left-0 z-[80] overflow-hidden rounded-2xl border border-line bg-white shadow-[0_12px_32px_rgba(26,29,33,0.14)]">
           <div className="border-b border-line p-2">
             <input
               ref={inputRef}

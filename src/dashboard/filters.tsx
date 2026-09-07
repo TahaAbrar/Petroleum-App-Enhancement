@@ -193,7 +193,7 @@ function DatePill({
   }
 
   return (
-    <div ref={rootRef} className={`relative ${fullWidth ? 'flex-1' : ''} ${open ? 'z-30' : 'z-0'}`}>
+    <div ref={rootRef} className={`relative ${fullWidth ? 'flex-1' : ''} ${open ? 'z-[80]' : 'z-0'}`}>
       <div className={`${boxClass(variant, fullWidth)} ${fullWidth ? 'w-full' : ''}`}>
         <button
           type="button"
@@ -233,7 +233,7 @@ function DatePill({
         <div
           role="dialog"
           aria-label={`${label} calendar`}
-          className={`absolute top-[calc(100%+6px)] z-30 w-[min(17.5rem,calc(100vw-1.5rem))] rounded-2xl border border-line bg-white p-3 shadow-[0_12px_32px_rgba(26,29,33,0.14)] ${
+          className={`absolute top-[calc(100%+6px)] z-[80] w-[min(17.5rem,calc(100vw-1.5rem))] rounded-2xl border border-line bg-white p-3 shadow-[0_12px_32px_rgba(26,29,33,0.14)] ${
             alignEnd ? 'right-0 left-auto' : 'left-0'
           }`}
         >
@@ -343,7 +343,7 @@ export function MenuFilter({
   }, [open])
 
   return (
-    <div ref={rootRef} className={`${boxClass(variant, fullWidth)} ${open ? 'z-30' : ''}`}>
+    <div ref={rootRef} className={`${boxClass(variant, fullWidth)} ${open ? 'z-[80]' : ''}`}>
       <button
         type="button"
         className="absolute inset-0 z-[1] cursor-pointer rounded-[inherit] border-0 bg-transparent"
@@ -362,7 +362,7 @@ export function MenuFilter({
       {open ? (
         <ul
           role="listbox"
-          className="absolute top-[calc(100%+6px)] right-0 left-0 z-30 max-h-64 min-w-full w-max max-w-[18rem] overflow-auto rounded-2xl border border-line bg-white py-1.5 shadow-[0_12px_32px_rgba(26,29,33,0.14)]"
+          className="absolute top-[calc(100%+6px)] right-0 left-0 z-[80] max-h-64 min-w-full w-max max-w-[18rem] overflow-auto rounded-2xl border border-line bg-white py-1.5 shadow-[0_12px_32px_rgba(26,29,33,0.14)]"
         >
           {options.map((opt) => {
             const active = opt.value === value
@@ -438,7 +438,7 @@ export function SearchableCustomerFilter({
   }, [open])
 
   return (
-    <div ref={rootRef} className={`${variants.boxFull} ${open ? 'z-30' : ''}`}>
+    <div ref={rootRef} className={`${variants.boxFull} ${open ? 'z-[80]' : ''}`}>
       <button
         type="button"
         className="absolute inset-0 z-[1] cursor-pointer rounded-[inherit] border-0 bg-transparent"
@@ -455,7 +455,7 @@ export function SearchableCustomerFilter({
         <ChevronIcon />
       </span>
       {open ? (
-        <div className="absolute top-[calc(100%+6px)] right-0 left-0 z-30 min-w-full overflow-hidden rounded-2xl border border-line bg-white shadow-[0_12px_32px_rgba(26,29,33,0.14)]">
+        <div className="absolute top-[calc(100%+6px)] right-0 left-0 z-[80] min-w-full overflow-hidden rounded-2xl border border-line bg-white shadow-[0_12px_32px_rgba(26,29,33,0.14)]">
           <div className="border-b border-line p-2">
             <input
               ref={inputRef}

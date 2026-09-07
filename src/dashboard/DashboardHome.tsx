@@ -21,8 +21,8 @@ import {
   EMPTY_TX_FILTERS,
   loadTransactionsPage,
   peekTransactions,
-  clearPageCache,
 } from './pageCache'
+import { notifyDataChanged, useLiveRefresh } from './liveRefresh'
 import { panel, selectBtn } from './styles'
 import {
   DeleteTxModal,
@@ -102,6 +102,15 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
       cancelled = true
     }
   }, [])
+
+  useLiveRefresh(() => {
+    void loadTransactionsPage(EMPTY_TX_FILTERS, 1, { force: true })
+      .then((data) => setRows(data.rows))
+      .catch(() => {})
+    void fetchDashboardStats()
+      .then(setStats)
+      .catch(() => {})
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -212,7 +221,7 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
     setDeleting(true)
     try {
       const result = await deleteTransaction(trid, password)
-      clearPageCache()
+      notifyDataChanged()
       setDeleteRow(null)
       setDeleteStep('confirm')
       setAdminPassword('')

@@ -28,6 +28,8 @@ const filterQuerySchema = z.object({
 })
 
 let cachedBizId = null
+/** Client DBs may omit Stockleger.BizId / CompId entirely. */
+let cachedStocklegerCompanyCol
 
 async function resolveBizId(pool) {
   if (cachedBizId != null) return cachedBizId
@@ -37,6 +39,40 @@ async function resolveBizId(pool) {
   cachedBizId = result.recordset[0]?.CompanyId ?? 1
   return cachedBizId
 }
+
+let cachedStocklegerCols
+
+async function stocklegerColumns(pool) {
+  if (cachedStocklegerCols) return cachedStocklegerCols
+  const result = await pool.request().query(`
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = N'dbo' AND TABLE_NAME = N'Stockleger'
+  `)
+  cachedStocklegerCols = new Set(result.recordset.map((row) => row.COLUMN_NAME))
+  return cachedStocklegerCols
+}
+
+async function resolveStocklegerCompanyCol(pool) {
+  if (cachedStocklegerCompanyCol !== undefined) return cachedStocklegerCompanyCol
+  const cols = await stocklegerColumns(pool)
+  cachedStocklegerCompanyCol = cols.has('BizId') ? 'BizId' : cols.has('CompId') ? 'CompId' : null
+  return cachedStocklegerCompanyCol
+}
+
+function stocklegerCompanySql(alias, col) {
+  if (!col) return '1 = 1'
+  return `(${alias}.${col} = @bizId OR ${alias}.${col} IS NULL)`
+}
+
+/** Client X5PS has no dbo.StockValue view — derive qty from Stockleger. */
+const STOCK_QTY_JOIN = `
+  LEFT JOIN (
+    SELECT ItemId, SUM(ISNULL(QtyIn, 0) - ISNULL(QtyOut, 0)) AS Stock
+    FROM dbo.Stockleger
+    GROUP BY ItemId
+  ) SV ON SV.ItemId = I.ItemId
+`
 
 function money(value) {
   if (value == null || value === '') return 0
@@ -145,13 +181,15 @@ const BASE_WHERE = `
   AND (@hasType = 0 OR L.Type = @type)
 `
 
-const STOCK_WHERE = `
-  SL.BizId = @bizId
+function stockWhereSql(companyCol) {
+  return `
+  ${stocklegerCompanySql('SL', companyCol)}
   AND (@hasFrom = 0 OR CAST(SL.Dated AS date) >= @dateFrom)
   AND (@hasTo = 0 OR CAST(SL.Dated AS date) <= @dateTo)
   AND (@hasAccid = 0 OR SL.Accid = @accid)
   AND (@hasType = 0 OR SL.RefNo = @type)
 `
+}
 
 function dbFail(res, err) {
   console.error('[reports] db error', err.message)
@@ -227,9 +265,9 @@ reportsRouter.get('/stock-statement', async (_req, res) => {
         ISNULL(SV.Stock, 0) AS Stock,
         ISNULL(I.PrRate, 0) AS LastRate,
         ISNULL(I.SaleRate, 0) AS SaleRate,
-        ISNULL(SV.StockValue, 0) AS StockValue
+        ISNULL(SV.Stock, 0) * ISNULL(I.PrRate, 0) AS StockValue
       FROM dbo.ItemReg I
-      LEFT JOIN dbo.StockValue SV ON SV.ItemId = I.ItemId
+      ${STOCK_QTY_JOIN}
       ORDER BY I.ItemId
     `)
 
@@ -351,10 +389,10 @@ reportsRouter.get('/stock-statement/:itemId', async (req, res) => {
           ISNULL(B.BrandName, N'') AS BrandName,
           ISNULL(I.PrRate, 0) AS LastRate,
           ISNULL(SV.Stock, 0) AS Stock,
-          ISNULL(SV.StockValue, 0) AS StockValue
+          ISNULL(SV.Stock, 0) * ISNULL(I.PrRate, 0) AS StockValue
         FROM dbo.ItemReg I
         LEFT JOIN dbo.BrandReg B ON B.BrandId = I.BrandId
-        LEFT JOIN dbo.StockValue SV ON SV.ItemId = I.ItemId
+        ${STOCK_QTY_JOIN}
         WHERE I.ItemId = @itemId
       `)
 
@@ -363,6 +401,9 @@ reportsRouter.get('/stock-statement/:itemId', async (req, res) => {
       return res.status(404).json({ ok: false, message: 'Item not found' })
     }
 
+    const stockCol = await resolveStocklegerCompanyCol(pool)
+    const slCols = await stocklegerColumns(pool)
+    const sxSelect = slCols.has('SX') ? 'SL.SX' : 'CAST(NULL AS money) AS SX'
     const ledgerResult = await pool
       .request()
       .input('itemId', sql.Int, itemId)
@@ -373,7 +414,7 @@ reportsRouter.get('/stock-statement/:itemId', async (req, res) => {
           SL.Dated,
           SL.VNo,
           SL.Description,
-          SL.SX,
+          ${sxSelect},
           SL.QtyIn,
           SL.QtyOut,
           SL.RateIn,
@@ -386,7 +427,7 @@ reportsRouter.get('/stock-statement/:itemId', async (req, res) => {
           ) AS Balance
         FROM dbo.Stockleger SL
         WHERE SL.ItemId = @itemId
-          AND (SL.BizId = @bizId OR SL.BizId IS NULL)
+          AND ${stocklegerCompanySql('SL', stockCol)}
         ORDER BY SL.Dated, SL.Trid
       `)
 
@@ -515,6 +556,7 @@ reportsRouter.get('/products', async (req, res) => {
   try {
     const pool = await getPool()
     const bizId = await resolveBizId(pool)
+    const stockCol = await resolveStocklegerCompanyCol(pool)
     const request = pool.request()
     bindFilters(request, {
       dateFrom,
@@ -534,10 +576,10 @@ reportsRouter.get('/products', async (req, res) => {
         SUM(CASE WHEN ISNULL(SL.QtyOut, 0) > 0
           THEN ISNULL(SL.QtyOut, 0) * ISNULL(SL.RateOut, ISNULL(SL.PrValue, 0)) ELSE 0 END) AS StockOut,
         MAX(ISNULL(SV.Stock, 0)) AS CurrentStock,
-        MAX(ISNULL(SV.StockValue, 0)) AS CurrentStockValue
+        MAX(ISNULL(SV.Stock, 0) * ISNULL(I.PrRate, 0)) AS CurrentStockValue
       FROM dbo.ItemReg I
-      LEFT JOIN dbo.Stockleger SL ON SL.ItemId = I.ItemId AND ${STOCK_WHERE}
-      LEFT JOIN dbo.StockValue SV ON SV.ItemId = I.ItemId
+      LEFT JOIN dbo.Stockleger SL ON SL.ItemId = I.ItemId AND ${stockWhereSql(stockCol)}
+      ${STOCK_QTY_JOIN}
       WHERE 1 = 1
       ${stockProduct.sql}
       GROUP BY I.ItemId, I.ItemName

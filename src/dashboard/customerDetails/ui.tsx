@@ -278,7 +278,7 @@ export function PkrCell({ value }: { value: number }) {
   return <PkrValue value={value} className="block leading-tight text-[0.78rem] text-[#374151]" />
 }
 
-export function Td({ children, className = '' }: { children: ReactNode; className?: string }) {
+export function Td({ children, className = '' }: { children?: ReactNode; className?: string }) {
   return (
     <td
       className={`border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151] ${className}`}

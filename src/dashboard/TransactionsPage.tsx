@@ -10,10 +10,10 @@ import {
   loadTransactionsPage,
   peekTransactionCustomers,
   peekTransactions,
-  clearPageCache,
   TX_CHUNK,
   TX_PAGE_SIZE,
 } from './pageCache'
+import { notifyDataChanged, useLiveRefresh } from './liveRefresh'
 import { panel } from './styles'
 import {
   DeleteTxModal,
@@ -99,6 +99,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
   const desktopSentinelRef = useRef<HTMLDivElement | null>(null)
 
   const skipSearchPageReset = useRef(true)
+  const loadSerial = useRef(0)
 
   useEffect(() => {
     fetchedRef.current = fetched
@@ -122,45 +123,62 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
       .catch(() => toast.error('Could not load customers'))
   }, [])
 
+  const applyTxPage = useCallback(
+    (data: { rows: TransactionRow[]; total: number; summary: TransactionSummary }, silent: boolean) => {
+      setFetched(data.rows)
+      setTotal(data.total)
+      setSummary(data.summary)
+      setVisible((v) =>
+        silent
+          ? Math.min(Math.max(v, TX_CHUNK), data.rows.length)
+          : Math.min(TX_CHUNK, data.rows.length),
+      )
+    },
+    [],
+  )
+
+  const refreshTx = useCallback(
+    async (silent: boolean, serial?: number) => {
+      const mine = serial ?? loadSerial.current
+      const cached = peekTransactions(params, page)
+      if (!silent && !cached) setLoading(true)
+      try {
+        const data = await loadTransactionsPage(params, page, { force: true })
+        if (mine !== loadSerial.current) return
+        applyTxPage(data, silent)
+        if (!silent && data.rows.length === TX_PAGE_SIZE && page * TX_PAGE_SIZE < data.total) {
+          void loadTransactionsPage(params, page + 1, { force: true })
+        }
+      } catch (err) {
+        if (mine !== loadSerial.current || silent || cached) return
+        setFetched([])
+        setTotal(0)
+        setSummary(EMPTY_TX_SUMMARY)
+        toast.error(err instanceof Error ? err.message : 'Could not load transactions')
+      } finally {
+        if (mine === loadSerial.current && !silent) setLoading(false)
+      }
+    },
+    [params, page, applyTxPage],
+  )
+
   useEffect(() => {
-    let cancelled = false
+    const mine = ++loadSerial.current
     const cached = peekTransactions(params, page)
     if (cached) {
-      setFetched(cached.rows)
-      setTotal(cached.total)
-      setSummary(cached.summary)
-      setVisible(Math.min(TX_CHUNK, cached.rows.length))
+      applyTxPage(cached, false)
       setLoading(false)
     } else {
       setFetched([])
       setVisible(TX_CHUNK)
       setLoading(true)
     }
-    loadTransactionsPage(params, page)
-      .then((data) => {
-        if (cancelled) return
-        setFetched(data.rows)
-        setTotal(data.total)
-        setSummary(data.summary)
-        setVisible(Math.min(TX_CHUNK, data.rows.length))
-        if (data.rows.length === TX_PAGE_SIZE && page * TX_PAGE_SIZE < data.total) {
-          void loadTransactionsPage(params, page + 1)
-        }
-      })
-      .catch((err) => {
-        if (cancelled || cached) return
-        setFetched([])
-        setTotal(0)
-        setSummary(EMPTY_TX_SUMMARY)
-        toast.error(err instanceof Error ? err.message : 'Could not load transactions')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [params, page])
+    void refreshTx(false, mine)
+  }, [params, page, applyTxPage, refreshTx])
+
+  useLiveRefresh(() => {
+    void refreshTx(true)
+  })
 
   const rows = fetched.slice(0, Math.min(visible, fetched.length))
   const displayRows = useMemo(() => buildTransactionDisplayRows(rows), [rows])
@@ -204,7 +222,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
     setDeleting(true)
     try {
       const result = await deleteTransaction(trid, password)
-      clearPageCache()
+      notifyDataChanged()
       setDeleteRow(null)
       setDeleteStep('confirm')
       setAdminPassword('')
@@ -289,10 +307,10 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
       </div>
 
       <section
-        className={`${panel} relative z-0 overflow-visible rounded-2xl p-4 lg:p-5`}
+        className={`${panel} relative z-20 overflow-visible rounded-2xl p-4 lg:p-5`}
         aria-label="Filters"
       >
-        <div className="relative z-0 grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2 xl:grid-cols-[1.2fr_1.4fr_1fr]">
+        <div className="relative grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2 xl:grid-cols-[1.2fr_1.4fr_1fr]">
           <label className="flex min-w-0 flex-col gap-1.5 overflow-visible">
             <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">Customer</span>
             <SearchableCustomerFilter
