@@ -7,8 +7,6 @@ export const dashboardRouter = Router()
 const STATUS_SQL = `(L.Status IS NULL OR L.Status = N'Posted')`
 /** Unposted only — Posted rows drop out of today's credit/debit/tx cards. */
 const UNPOSTED_SQL = `(L.Status IS NULL OR LTRIM(RTRIM(L.Status)) = N'')`
-/** Customer ledger only — avoids double-entry equality across all accounts. */
-const CUSTOMER_GROUP_SQL = `G.GroupName = N'CUSTOMERS'`
 const TODAY_SQL = `CAST(L.Dated AS date) = CAST(GETDATE() AS date)`
 
 const rangeSchema = z.enum(['7d', '1m', '6m', '1y']).default('7d')
@@ -124,7 +122,6 @@ function buildMonthlySeries(rows, months = 6) {
 }
 
 function toBalanceTrend(points) {
-  // Per-day/month net only — no cumulative carry. Empty buckets stay 0.
   return points.map((p) => ({
     label: p.label,
     value: p.net,
@@ -144,15 +141,13 @@ dashboardRouter.get('/stats', async (_req, res) => {
          INNER JOIN dbo.AccReg A ON A.Accid = L.Accid
          INNER JOIN dbo.GroupReg G ON G.GroupId = A.GroupId
          WHERE ${UNPOSTED_SQL}
-           AND ${TODAY_SQL}
-           AND ${CUSTOMER_GROUP_SQL}) AS TotalCredit,
+           AND ${TODAY_SQL}) AS TotalCredit,
         (SELECT SUM(CASE WHEN ISNULL(L.Debit, 0) > 0 THEN L.Debit ELSE 0 END)
          FROM dbo.Leger L
          INNER JOIN dbo.AccReg A ON A.Accid = L.Accid
          INNER JOIN dbo.GroupReg G ON G.GroupId = A.GroupId
          WHERE ${UNPOSTED_SQL}
-           AND ${TODAY_SQL}
-           AND ${CUSTOMER_GROUP_SQL}) AS TotalDebit,
+           AND ${TODAY_SQL}) AS TotalDebit,
         (SELECT COUNT(*)
          FROM dbo.Leger L
          INNER JOIN dbo.AccReg A ON A.Accid = L.Accid
@@ -190,7 +185,6 @@ dashboardRouter.get('/credit-debit', async (_req, res) => {
       INNER JOIN dbo.AccReg A ON A.Accid = L.Accid
       INNER JOIN dbo.GroupReg G ON G.GroupId = A.GroupId
       WHERE ${STATUS_SQL}
-        AND ${CUSTOMER_GROUP_SQL}
         AND CAST(L.Dated AS date) >= ${startExpr}
       GROUP BY CAST(L.Dated AS date)
       ORDER BY Bucket
@@ -231,7 +225,7 @@ dashboardRouter.get('/balance-trend', async (req, res) => {
         INNER JOIN dbo.AccReg A ON A.Accid = L.Accid
         INNER JOIN dbo.GroupReg G ON G.GroupId = A.GroupId
         WHERE ${STATUS_SQL}
-          AND ${CUSTOMER_GROUP_SQL}
+          AND L.Accid <> 1
           AND CAST(L.Dated AS date) >= ${startExpr}
         GROUP BY DATEFROMPARTS(YEAR(L.Dated), MONTH(L.Dated), 1)
         ORDER BY Bucket
@@ -249,7 +243,7 @@ dashboardRouter.get('/balance-trend', async (req, res) => {
         INNER JOIN dbo.AccReg A ON A.Accid = L.Accid
         INNER JOIN dbo.GroupReg G ON G.GroupId = A.GroupId
         WHERE ${STATUS_SQL}
-          AND ${CUSTOMER_GROUP_SQL}
+          AND L.Accid <> 1
           AND CAST(L.Dated AS date) >= ${startExpr}
         GROUP BY CAST(L.Dated AS date)
         ORDER BY Bucket

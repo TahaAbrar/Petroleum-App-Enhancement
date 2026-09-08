@@ -110,6 +110,19 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
     void fetchDashboardStats()
       .then(setStats)
       .catch(() => {})
+    void fetchBalanceTrend(trendRange)
+      .then((data) => {
+        setBalanceTrend((prev) => {
+          if (
+            prev.length === data.length &&
+            prev.every((p, i) => p.label === data[i].label && p.value === data[i].value)
+          ) {
+            return prev
+          }
+          return data
+        })
+      })
+      .catch(() => {})
   })
 
   useEffect(() => {

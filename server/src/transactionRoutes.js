@@ -645,7 +645,6 @@ transactionRouter.get('/stats', async (req, res) => {
          INNER JOIN dbo.AccReg A ON A.Accid = L.Accid
          INNER JOIN dbo.GroupReg G ON G.GroupId = A.GroupId
          WHERE ${STATUS_SQL}
-           AND ${CUSTOMER_GROUP_SQL}
            ${kindFilter}
            AND CAST(L.Dated AS date) = CAST(GETDATE() AS date)) AS TodayAmount
     `)
