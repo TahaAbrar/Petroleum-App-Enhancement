@@ -93,8 +93,8 @@ export function DashboardShell({ config }: Props) {
   const shortAddress = truncateAddress(company.address)
 
   useEffect(() => {
-    if (hideHeaderSearch) setQuery('')
-  }, [hideHeaderSearch])
+    setQuery('')
+  }, [location.pathname])
 
   useEffect(() => {
     let cancelled = false

@@ -18,6 +18,7 @@ import { StatIcon } from './icons'
 import { LoadingHint } from './loading'
 import { MobileSearchField } from './MobileSearchField'
 import {
+  clearPageCache,
   EMPTY_TX_FILTERS,
   loadTransactionCustomers,
   loadTransactionsPage,
