@@ -24,7 +24,7 @@ import {
 
 export const CUSTOMER_BATCH = 40
 export const CUSTOMER_CHUNK = 15
-export const TX_PAGE_SIZE = 50
+export const TX_PAGE_SIZE = 20
 export const TX_CHUNK = 15
 
 export type CustomerListParams = {
@@ -105,7 +105,7 @@ export function peekCustomerGroups() {
 }
 
 export function peekTransactions(params: TransactionListParams = EMPTY_TX_FILTERS, page = 1) {
-  const entry = txCache.get(`${transactionListKey(params)}:${page}`) ?? null
+  const entry = txCache.get(`${transactionListKey(params)}:${TX_PAGE_SIZE}:${page}`) ?? null
   if (!entry) return null
   return { ...entry, rows: entry.rows.map(normalizeTransactionRow) }
 }
@@ -226,7 +226,7 @@ export async function loadTransactionsPage(
   page: number,
   opts?: { force?: boolean },
 ) {
-  const inflightKey = `${transactionListKey(params)}:${page}`
+  const inflightKey = `${transactionListKey(params)}:${TX_PAGE_SIZE}:${page}`
   const cached = txCache.get(inflightKey)
   if (!opts?.force && cached) {
     const existing = txInflight.get(inflightKey)

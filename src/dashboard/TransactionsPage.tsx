@@ -10,13 +10,14 @@ import {
   loadTransactionsPage,
   peekTransactionCustomers,
   peekTransactions,
-  TX_CHUNK,
+  clearPageCache,
   TX_PAGE_SIZE,
 } from './pageCache'
 import { notifyDataChanged, useLiveRefresh } from './liveRefresh'
 import { panel } from './styles'
 import {
   DeleteTxModal,
+  EditAccidModal,
   MobileVoucherCard,
   TxLedgerRow,
   TxTableColgroup,
@@ -28,6 +29,7 @@ import {
   deleteTransaction,
   groupByVoucher,
   realDeleteTrid,
+  updateTransactionAccid,
   type TransactionCustomer,
   type TransactionListParams,
   type TransactionRow,
@@ -86,24 +88,18 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
   const [fetched, setFetched] = useState<TransactionRow[]>(() => seeded?.rows ?? [])
   const [total, setTotal] = useState(() => seeded?.total ?? 0)
   const [summary, setSummary] = useState<TransactionSummary>(() => seeded?.summary ?? EMPTY_TX_SUMMARY)
-  const [visible, setVisible] = useState(() => Math.min(TX_CHUNK, seeded?.rows.length ?? 0))
   const [loading, setLoading] = useState(() => !seeded)
   const [deleteRow, setDeleteRow] = useState<TransactionRow | null>(null)
   const [deleteStep, setDeleteStep] = useState<'confirm' | 'password'>('confirm')
   const [adminPassword, setAdminPassword] = useState('')
   const [deleting, setDeleting] = useState(false)
-  const fetchedRef = useRef(fetched)
-  const afterFiveMobileRef = useRef<HTMLLIElement | null>(null)
-  const afterFiveDesktopRef = useRef<HTMLTableRowElement | null>(null)
-  const mobileSentinelRef = useRef<HTMLDivElement | null>(null)
-  const desktopSentinelRef = useRef<HTMLDivElement | null>(null)
+  const [editRow, setEditRow] = useState<TransactionRow | null>(null)
+  const [editAccid, setEditAccid] = useState('')
+  const [editPassword, setEditPassword] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
 
   const skipSearchPageReset = useRef(true)
   const loadSerial = useRef(0)
-
-  useEffect(() => {
-    fetchedRef.current = fetched
-  }, [fetched])
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -124,15 +120,10 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
   }, [])
 
   const applyTxPage = useCallback(
-    (data: { rows: TransactionRow[]; total: number; summary: TransactionSummary }, silent: boolean) => {
+    (data: { rows: TransactionRow[]; total: number; summary: TransactionSummary }) => {
       setFetched(data.rows)
       setTotal(data.total)
       setSummary(data.summary)
-      setVisible((v) =>
-        silent
-          ? Math.min(Math.max(v, TX_CHUNK), data.rows.length)
-          : Math.min(TX_CHUNK, data.rows.length),
-      )
     },
     [],
   )
@@ -145,8 +136,8 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
       try {
         const data = await loadTransactionsPage(params, page, { force: true })
         if (mine !== loadSerial.current) return
-        applyTxPage(data, silent)
-        if (!silent && data.rows.length === TX_PAGE_SIZE && page * TX_PAGE_SIZE < data.total) {
+        applyTxPage(data)
+        if (!silent && page * TX_PAGE_SIZE < data.total) {
           void loadTransactionsPage(params, page + 1, { force: true })
         }
       } catch (err) {
@@ -166,11 +157,10 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
     const mine = ++loadSerial.current
     const cached = peekTransactions(params, page)
     if (cached) {
-      applyTxPage(cached, false)
+      applyTxPage(cached)
       setLoading(false)
     } else {
       setFetched([])
-      setVisible(TX_CHUNK)
       setLoading(true)
     }
     void refreshTx(false, mine)
@@ -180,10 +170,8 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
     void refreshTx(true)
   })
 
-  const rows = fetched.slice(0, Math.min(visible, fetched.length))
-  const displayRows = useMemo(() => buildTransactionDisplayRows(rows), [rows])
+  const displayRows = useMemo(() => buildTransactionDisplayRows(fetched), [fetched])
   const voucherGroups = useMemo(() => groupByVoucher(displayRows), [displayRows])
-  const hasMore = visible < fetched.length
   const totalPages = Math.max(1, Math.ceil(total / TX_PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
 
@@ -199,6 +187,49 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
     setDeleteStep('confirm')
     setAdminPassword('')
   }, [])
+
+  const requestEdit = useCallback((row: TransactionRow) => {
+    setEditRow(row)
+    setEditAccid('')
+    setEditPassword('')
+  }, [])
+
+  const closeEditModal = useCallback(() => {
+    if (savingEdit) return
+    setEditRow(null)
+    setEditAccid('')
+    setEditPassword('')
+  }, [savingEdit])
+
+  const confirmEdit = useCallback(async () => {
+    if (!editRow || savingEdit) return
+    const password = editPassword.trim()
+    const newAccid = Number(editAccid)
+    if (!password || !Number.isFinite(newAccid) || newAccid <= 0) {
+      toast.error('Enter Accid and admin password')
+      return
+    }
+    setSavingEdit(true)
+    try {
+      const result = await updateTransactionAccid({
+        trid: editRow.trid,
+        newAccid,
+        password,
+      })
+      clearPageCache()
+      notifyDataChanged()
+      setEditRow(null)
+      setEditAccid('')
+      setEditPassword('')
+      toast.success(result.message || 'Account updated')
+      const data = await loadTransactionsPage(params, page, { force: true })
+      applyTxPage(data)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update account')
+    } finally {
+      setSavingEdit(false)
+    }
+  }, [editRow, savingEdit, editPassword, editAccid, params, page, applyTxPage])
 
   const openPasswordStep = useCallback(() => {
     if (!deleteRow || deleting) return
@@ -228,40 +259,13 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
       setAdminPassword('')
       toast.success(result.message || 'Debit and Credit entries deleted')
       const data = await loadTransactionsPage(params, page, { force: true })
-      setFetched(data.rows)
-      setTotal(data.total)
-      setSummary(data.summary)
-      setVisible(Math.min(TX_CHUNK, data.rows.length))
+      applyTxPage(data)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not delete transaction')
     } finally {
       setDeleting(false)
     }
-  }, [deleteRow, deleting, adminPassword, voucherGroups, displayRows, params, page])
-
-  const revealMore = useCallback(() => {
-    setVisible((v) => Math.min(v + TX_CHUNK, fetchedRef.current.length || v + TX_CHUNK))
-  }, [])
-
-  useEffect(() => {
-    const observers: IntersectionObserver[] = []
-    const watch = (target: Element | null) => {
-      if (!target) return
-      const observer = new IntersectionObserver(
-        (entries) => {
-          if (entries.some((e) => e.isIntersecting)) revealMore()
-        },
-        { root: null, rootMargin: '220px 0px', threshold: 0.01 },
-      )
-      observer.observe(target)
-      observers.push(observer)
-    }
-    watch(afterFiveMobileRef.current)
-    watch(afterFiveDesktopRef.current)
-    watch(mobileSentinelRef.current)
-    watch(desktopSentinelRef.current)
-    return () => observers.forEach((o) => o.disconnect())
-  }, [revealMore, hasMore, rows.length])
+  }, [deleteRow, deleting, adminPassword, voucherGroups, displayRows, params, page, applyTxPage])
 
   function goToPage(next: number) {
     setPage(next)
@@ -307,20 +311,20 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
       </div>
 
       <section
-        className={`${panel} relative z-20 overflow-visible rounded-2xl p-4 lg:p-5`}
+        className={`${panel} relative z-30 overflow-visible rounded-2xl p-4 lg:p-5`}
         aria-label="Filters"
       >
-        <div className="relative grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2 xl:grid-cols-[1.2fr_1.4fr_1fr]">
-          <label className="flex min-w-0 flex-col gap-1.5 overflow-visible">
+        <div className="relative z-30 grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2 xl:grid-cols-[1.2fr_1.4fr_1fr]">
+          <div className="relative z-30 flex min-w-0 flex-col gap-1.5 overflow-visible">
             <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">Customer</span>
             <SearchableCustomerFilter
               value={draft.accid}
               customers={customers}
               onChange={(next) => setDraft((current) => ({ ...current, accid: next }))}
             />
-          </label>
+          </div>
 
-          <label className="flex min-w-0 flex-col gap-1.5 overflow-visible">
+          <div className="relative z-20 flex min-w-0 flex-col gap-1.5 overflow-visible">
             <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">Date Range</span>
             <DateRangeFilter
               grouped
@@ -336,9 +340,9 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
                 setDraft((current) => ({ ...current, dateFrom: range.from, dateTo: range.to }))
               }}
             />
-          </label>
+          </div>
 
-          <label className="flex min-w-0 flex-col gap-1.5 overflow-visible">
+          <div className="relative z-10 flex min-w-0 flex-col gap-1.5 overflow-visible">
             <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">
               Transaction Type
             </span>
@@ -360,7 +364,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
                 { value: 'debit', label: 'Debit' },
               ]}
             />
-          </label>
+          </div>
         </div>
       </section>
 
@@ -434,29 +438,24 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
           </h2>
         </div>
 
-        {loading && rows.length === 0 ? (
+        {loading && fetched.length === 0 ? (
           <LoadingHint label="Loading transactions…" />
         ) : total === 0 ? (
           <p className="my-10 text-center text-sm font-semibold text-muted">No transactions found.</p>
         ) : (
           <>
             <ul className="m-0 flex list-none flex-col gap-2.5 p-0 lg:hidden">
-              {voucherGroups.map((group, groupIndex) => (
+              {voucherGroups.map((group) => (
                 <MobileVoucherCard
                   key={group.key}
                   group={group}
-                  cardRef={
-                    groupIndex > 0 && groupIndex % Math.max(1, Math.floor(TX_CHUNK / 2)) === 0
-                      ? afterFiveMobileRef
-                      : undefined
-                  }
                   canView={canViewCustomer}
                   canDelete={canDelete}
                   onView={openCustomer}
+                  onEdit={requestEdit}
                   onDelete={requestDelete}
                 />
               ))}
-              <div ref={mobileSentinelRef} className="h-4 shrink-0" />
             </ul>
 
             <div className="hidden min-w-0 lg:block">
@@ -464,7 +463,7 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
                 <TxTableColgroup canDelete={canDelete} />
                 <TxTableHead canDelete={canDelete} />
                 <tbody>
-                  {voucherGroups.flatMap((group, groupIndex) =>
+                  {voucherGroups.flatMap((group) =>
                     group.rows.map((row, legIndex) => (
                       <TxLedgerRow
                         key={row.trid}
@@ -474,19 +473,13 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
                         canView={canViewCustomer}
                         canDelete={canDelete}
                         onView={openCustomer}
+                        onEdit={requestEdit}
                         onDelete={requestDelete}
-                        rowRef={
-                          groupIndex % Math.max(1, Math.floor(TX_CHUNK / 2)) === 4 &&
-                          legIndex === 0
-                            ? afterFiveDesktopRef
-                            : undefined
-                        }
                       />
                     )),
                   )}
                 </tbody>
               </table>
-              <div ref={desktopSentinelRef} className="h-4" />
             </div>
 
             {totalPages > 1 ? (
@@ -541,6 +534,22 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
           }}
           onContinue={openPasswordStep}
           onConfirm={() => void confirmDelete()}
+        />
+      ) : null}
+
+      {editRow ? (
+        <EditAccidModal
+          currentAccid={editRow.accid}
+          vno={editRow.vno}
+          type={editRow.ledgerType}
+          accounts={customers}
+          newAccid={editAccid}
+          password={editPassword}
+          saving={savingEdit}
+          onAccidChange={setEditAccid}
+          onPasswordChange={setEditPassword}
+          onClose={closeEditModal}
+          onConfirm={() => void confirmEdit()}
         />
       ) : null}
     </div>

@@ -61,7 +61,7 @@ const listQuerySchema = z.object({
   kind: z.enum(['all', 'credit', 'debit']).default('all'),
   sort: z.enum(['recent', 'oldest']).default('oldest'),
   page: z.coerce.number().int().min(1).max(10000).default(1),
-  pageSize: z.coerce.number().int().min(1).max(50).default(50),
+  pageSize: z.coerce.number().int().min(1).max(50).default(20),
 })
 
 const customersQuerySchema = z.object({
@@ -295,14 +295,23 @@ const deleteBodySchema = z.object({
   password: z.string().min(1, 'Password is required').max(128),
 })
 
-/** Verify against Administrator account password (UserReg). Wrong password → no delete. */
-async function verifyAdminPassword(pool, password) {
-  const result = await pool.request().query(`
-    SELECT TOP (1) UserPass
-    FROM dbo.UserReg
-    WHERE LTRIM(RTRIM(Type)) IN (N'Administrator', N'Admin')
-    ORDER BY UserId
-  `)
+const editAccidBodySchema = z.object({
+  trid: z.coerce.number().int().positive().max(2_147_483_647),
+  newAccid: z.coerce.number().int().positive().max(2_147_483_647),
+  password: z.string().min(1, 'Password is required').max(128),
+})
+
+/** Verify against the logged-in Administrator's UserReg password. */
+async function verifyAdminPassword(pool, password, userId) {
+  const result = await pool
+    .request()
+    .input('userId', sql.Int, userId)
+    .query(`
+      SELECT TOP (1) UserPass
+      FROM dbo.UserReg
+      WHERE UserId = @userId
+        AND LTRIM(RTRIM(Type)) IN (N'Administrator', N'Admin')
+    `)
   const admin = result.recordset[0]
   if (!admin) return false
   return safeEqualPassword(password, admin.UserPass ?? '')
@@ -828,6 +837,7 @@ transactionRouter.get('/', async (req, res) => {
         OR (@kind = N'credit' AND ISNULL(Tx.Credit, 0) > 0 AND Tx.Accid <> 1)
         OR (@kind = N'debit' AND ISNULL(Tx.Debit, 0) > 0 AND Tx.Accid <> 1)
       )
+        AND (@hasAccid = 0 OR Tx.Accid = @accid)
       ORDER BY
         pv.VoucherRn,
         CASE
@@ -888,7 +898,7 @@ transactionRouter.post('/delete', async (req, res) => {
   try {
     const pool = await getPool()
 
-    const adminOk = await verifyAdminPassword(pool, password)
+    const adminOk = await verifyAdminPassword(pool, password, userId)
     if (!adminOk) {
       return res.status(403).json({ ok: false, message: 'Incorrect admin password' })
     }
@@ -1032,6 +1042,59 @@ transactionRouter.post('/delete', async (req, res) => {
       amount,
       message,
     })
+  } catch (err) {
+    return dbFail(res, err)
+  }
+})
+
+/**
+ * Change Accid on one Leger row. Scoped by Trid only.
+ * Body: { trid, newAccid, password }
+ */
+transactionRouter.post('/edit-accid', async (req, res) => {
+  const parsed = editAccidBodySchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({
+      ok: false,
+      message: parsed.error.issues[0]?.message || 'Invalid request',
+    })
+  }
+
+  const { trid, newAccid, password } = parsed.data
+  const userId = Number(req.user?.id)
+  if (!Number.isFinite(userId) || userId <= 0) {
+    return res.status(401).json({ ok: false, message: 'Unauthorized' })
+  }
+  if (req.user?.role !== 'Administrator') {
+    return res.status(403).json({
+      ok: false,
+      message: 'Only Administrator can edit transactions',
+    })
+  }
+
+  try {
+    const pool = await getPool()
+    const adminOk = await verifyAdminPassword(pool, password, userId)
+    if (!adminOk) {
+      return res.status(403).json({ ok: false, message: 'Incorrect admin password' })
+    }
+
+    const result = await pool
+      .request()
+      .input('trid', sql.Int, trid)
+      .input('newAccid', sql.Int, newAccid)
+      .query(`
+        UPDATE dbo.Leger
+        SET Accid = @newAccid
+        WHERE Trid = @trid
+      `)
+
+    const updated = result.rowsAffected?.[0] ?? 0
+    if (!updated) {
+      return res.status(404).json({ ok: false, message: 'Transaction not found' })
+    }
+
+    return res.json({ ok: true, message: 'Account updated' })
   } catch (err) {
     return dbFail(res, err)
   }
