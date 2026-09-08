@@ -236,7 +236,7 @@ export function KindLedgerPage({ homePath, kind, title, subtitle, searchQuery = 
       </div>
 
       <section
-        className={`${panel} relative z-30 overflow-visible rounded-2xl p-4 lg:p-5`}
+        className={`${panel} relative z-10 overflow-visible rounded-2xl p-4 lg:p-5`}
         aria-label="Filters"
       >
         <div className="relative z-30 grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2">
