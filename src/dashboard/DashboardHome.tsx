@@ -244,8 +244,6 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
         trid: editRow.trid,
         newAccid,
         password,
-        vno: Number(editRow.vno),
-        type: editRow.ledgerType,
       })
       clearPageCache()
       setEditRow(null)

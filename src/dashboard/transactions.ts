@@ -243,9 +243,9 @@ export async function deleteTransaction(
   )
 }
 
-/** Change Accid on one Leger row (scoped by Trid + VNo + Type). Admin password required. */
+/** Change Accid on one Leger row (scoped by Trid). Admin password required. */
 export async function updateTransactionAccid(
-  body: { trid: number; newAccid: number; password: string; vno: number; type: string },
+  body: { trid: number; newAccid: number; password: string },
   signal?: AbortSignal,
 ) {
   return apiPost<{ ok: true; message: string }>('/api/transactions/edit-accid', body, { signal })

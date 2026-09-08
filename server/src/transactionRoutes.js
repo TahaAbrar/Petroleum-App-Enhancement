@@ -299,8 +299,6 @@ const editAccidBodySchema = z.object({
   trid: z.coerce.number().int().positive().max(2_147_483_647),
   newAccid: z.coerce.number().int().positive().max(2_147_483_647),
   password: z.string().min(1, 'Password is required').max(128),
-  vno: z.coerce.number().int().max(2_147_483_647),
-  type: z.string().trim().min(1).max(50),
 })
 
 /** Verify against the logged-in Administrator's UserReg password. */
@@ -1050,8 +1048,8 @@ transactionRouter.post('/delete', async (req, res) => {
 })
 
 /**
- * Change Accid on one Leger row. Scoped by Trid + VNo + Type so other account entries stay untouched.
- * Body: { trid, newAccid, password, vno, type }
+ * Change Accid on one Leger row. Scoped by Trid only.
+ * Body: { trid, newAccid, password }
  */
 transactionRouter.post('/edit-accid', async (req, res) => {
   const parsed = editAccidBodySchema.safeParse(req.body)
@@ -1062,7 +1060,7 @@ transactionRouter.post('/edit-accid', async (req, res) => {
     })
   }
 
-  const { trid, newAccid, password, vno, type } = parsed.data
+  const { trid, newAccid, password } = parsed.data
   const userId = Number(req.user?.id)
   if (!Number.isFinite(userId) || userId <= 0) {
     return res.status(401).json({ ok: false, message: 'Unauthorized' })
@@ -1081,22 +1079,14 @@ transactionRouter.post('/edit-accid', async (req, res) => {
       return res.status(403).json({ ok: false, message: 'Incorrect admin password' })
     }
 
-    const bizId = await resolveBizId(pool)
-    const companyCol = await resolveCompanyCol(pool)
     const result = await pool
       .request()
       .input('trid', sql.Int, trid)
-      .input('vno', sql.Int, vno)
-      .input('type', sql.NVarChar(50), type)
       .input('newAccid', sql.Int, newAccid)
-      .input('bizId', sql.Int, bizId)
       .query(`
         UPDATE dbo.Leger
         SET Accid = @newAccid
         WHERE Trid = @trid
-          AND VNo = @vno
-          AND Type = @type
-          AND ${companyCol} = @bizId
       `)
 
     const updated = result.rowsAffected?.[0] ?? 0

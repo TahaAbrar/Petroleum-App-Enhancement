@@ -215,8 +215,6 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
         trid: editRow.trid,
         newAccid,
         password,
-        vno: Number(editRow.vno),
-        type: editRow.ledgerType,
       })
       clearPageCache()
       notifyDataChanged()
