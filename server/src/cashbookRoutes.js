@@ -321,9 +321,10 @@ cashbookRouter.post('/entries', async (req, res) => {
     const dno = await nextDNo(pool, bizId)
     const debitName = cleanText(debitAcc.AccName) || '—'
     const creditName = cleanText(creditAcc.AccName) || '—'
-    // Store Acc Bal box value as-is (current balance shown on form)
-    const debitBal = roundMoney(money(debitAcc.Balance))
-    const creditBal = roundMoney(money(creditAcc.Balance))
+    // Leger.Bal = balance AFTER this entry (same as desktop running Bal).
+    // Account balance formula is OpBal + SUM(Debit) - SUM(Credit).
+    const debitBal = roundMoney(money(debitAcc.Balance) + amount)
+    const creditBal = roundMoney(money(creditAcc.Balance) - amount)
     const mvnoValue = cleanText(mvno).slice(0, 50)
     const descDebit = `${description} From ${creditName}`.slice(0, 1500)
     const descCredit = `${description} From ${debitName}`.slice(0, 1500)
