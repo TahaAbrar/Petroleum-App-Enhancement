@@ -32,3 +32,5 @@ knowledge_base/Cursor.MD
 # Web Push device list + last notified Trid (local runtime)
 server/data/push-subs.json
 server/data/push-state.json
+
+deploy/

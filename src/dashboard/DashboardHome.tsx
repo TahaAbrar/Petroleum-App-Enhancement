@@ -519,7 +519,7 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
               ))}
             </ul>
 
-            <div className="hidden min-w-0 lg:block">
+            <div className="hidden min-w-0 overflow-x-auto rounded-xl border border-line lg:block">
               <table className="w-full table-fixed border-collapse">
                 <TxTableColgroup canDelete={canDelete} />
                 <TxTableHead canDelete={canDelete} />

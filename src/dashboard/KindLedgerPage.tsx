@@ -345,31 +345,31 @@ export function KindLedgerPage({ homePath, kind, title, subtitle, searchQuery = 
               {hasMore ? <div ref={mobileSentinelRef} className="h-1" aria-hidden="true" /> : null}
             </ul>
 
-            <div className="hidden min-w-0 lg:block">
+            <div className="hidden min-w-0 overflow-x-auto rounded-xl border border-line lg:block">
               <table className="w-full table-fixed border-collapse">
                 <colgroup>
+                  <col className="w-[12%]" />
+                  <col className="w-[10%]" />
                   <col className="w-[16%]" />
-                  <col className="w-[12%]" />
-                  <col className="w-[12%]" />
                   <col className="w-[18%]" />
                   <col className="w-[14%]" />
                   <col className="w-[14%]" />
-                  <col className="w-[14%]" />
+                  <col className="w-[16%]" />
                 </colgroup>
                 <thead>
-                  <tr>
+                  <tr className="bg-[#fafbfc]">
                     {[
-                      'Customer',
                       'Date',
-                      'Amount',
+                      'REF',
+                      'Account',
                       'Product / Service',
-                      'Reference',
+                      'Amount',
                       'Balance',
                       'Created By',
                     ].map((h) => (
                       <th
                         key={h}
-                        className="border-b border-line px-2 py-3 text-left text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase"
+                        className="border-b border-line px-2.5 py-2.5 text-left text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase whitespace-nowrap"
                       >
                         {h}
                       </th>
@@ -383,29 +383,29 @@ export function KindLedgerPage({ homePath, kind, title, subtitle, searchQuery = 
                       ref={i === 4 ? afterFiveDesktopRef : undefined}
                       className="hover:bg-[#fcfcfd]"
                     >
-                      <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151]">
+                      <td className="border-b border-[#f1f2f4] px-2.5 py-2.5 align-top text-[0.78rem] text-[#374151]">
+                        {dateOnly(row.when)}
+                      </td>
+                      <td className="border-b border-[#f1f2f4] px-2.5 py-2.5 align-top text-[0.78rem] text-[#374151]">
+                        {row.reference}
+                      </td>
+                      <td className="border-b border-[#f1f2f4] px-2.5 py-2.5 align-top text-[0.78rem] font-semibold text-ink">
                         <span className="line-clamp-2 break-words" title={row.customer}>
                           {row.customer}
                         </span>
                       </td>
-                      <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151]">
-                        {dateOnly(row.when)}
-                      </td>
-                      <td className={`border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] font-bold ${amountTone}`}>
-                        <PkrCell value={row.amount} />
-                      </td>
-                      <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151]">
+                      <td className="border-b border-[#f1f2f4] px-2.5 py-2.5 align-top text-[0.78rem] text-[#374151]">
                         <span className="line-clamp-2 break-words" title={row.product}>
                           {row.product}
                         </span>
                       </td>
-                      <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151]">
-                        {row.reference}
+                      <td className={`border-b border-[#f1f2f4] px-2.5 py-2.5 align-top text-[0.78rem] font-bold ${amountTone}`}>
+                        <PkrCell value={row.amount} />
                       </td>
-                      <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] font-bold text-[#374151]">
+                      <td className="border-b border-[#f1f2f4] px-2.5 py-2.5 align-top text-[0.78rem] font-bold text-[#374151]">
                         <PkrCell value={row.balance} />
                       </td>
-                      <td className="border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151]">
+                      <td className="border-b border-[#f1f2f4] px-2.5 py-2.5 align-top text-[0.78rem] text-[#374151]">
                         <span className="block break-words leading-snug">{row.by}</span>
                       </td>
                     </tr>

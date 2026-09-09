@@ -96,10 +96,10 @@ export function MobileVoucherCard({
 export function TxTableHead({ canDelete }: { canDelete: boolean }) {
   return (
     <thead>
-      <tr>
+      <tr className="bg-[#fafbfc]">
         <Th>Date</Th>
         <Th>V.No</Th>
-        <Th>Account Name</Th>
+        <Th>Account</Th>
         <Th>Description</Th>
         <Th>Type</Th>
         <Th className="text-right">Debit</Th>
@@ -539,7 +539,7 @@ export function DeleteIcon() {
 function Th({ children, className = 'text-left' }: { children: ReactNode; className?: string }) {
   return (
     <th
-      className={`border-b border-line px-2 py-3 text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase ${className}`}
+      className={`border-b border-line px-2.5 py-2.5 text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase whitespace-nowrap ${className}`}
     >
       {children}
     </th>

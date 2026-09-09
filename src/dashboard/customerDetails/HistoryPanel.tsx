@@ -195,7 +195,7 @@ export function CustomerHistoryPanel({
         ) : null}
       </ul>
 
-      <div className="hidden min-w-0 lg:block">
+      <div className="hidden min-w-0 overflow-x-auto rounded-xl border border-line lg:block">
         <table className="w-full table-fixed border-collapse">
           <colgroup>
             <col className="w-[14%]" />
@@ -205,11 +205,11 @@ export function CustomerHistoryPanel({
             <col className="w-[18%]" />
           </colgroup>
           <thead>
-            <tr>
+            <tr className="bg-[#fafbfc]">
               {COLUMNS.map((h) => (
                 <th
                   key={h}
-                  className={`border-b border-line px-2 py-3 text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase ${
+                  className={`border-b border-line px-2.5 py-2.5 text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase whitespace-nowrap ${
                     h === 'Debit' || h === 'Credit' ? 'text-right' : 'text-left'
                   }`}
                 >

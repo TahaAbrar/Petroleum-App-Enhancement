@@ -293,13 +293,13 @@ export function CustomersPage({ searchQuery = '', onSearchChange }: Props) {
               {loadingMore ? <LoadingHint compact label="Loading more customers…" /> : null}
             </ul>
 
-            <div className="-mx-1 hidden overflow-x-auto lg:block">
+            <div className="-mx-1 hidden overflow-x-auto rounded-xl border border-line lg:block">
               <table className="w-full min-w-[860px] border-collapse">
                 <thead>
-                  <tr>
+                  <tr className="bg-[#fafbfc]">
                     {[
                       'Date',
-                      'Customer Name',
+                      'Account',
                       'Phone',
                       'Group',
                       'Closing Balance',
@@ -307,7 +307,7 @@ export function CustomersPage({ searchQuery = '', onSearchChange }: Props) {
                     ].map((h) => (
                       <th
                         key={h}
-                        className="border-b border-line px-2.5 py-3 text-left text-[0.72rem] font-bold tracking-[0.04em] text-muted uppercase whitespace-nowrap"
+                        className="border-b border-line px-2.5 py-2.5 text-left text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase whitespace-nowrap"
                       >
                         {h}
                       </th>

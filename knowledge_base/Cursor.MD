@@ -211,7 +211,8 @@ Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info
 - DNo: `ISNULL(MAX(DNo),0)+1 WHERE BizId=@bizId`
 - Two `Leger` rows: Debit leg + Credit leg; `Type='JV'`, `RefNo='WEB'`
 - Description: `{text} From {other account name}`
-- **Bal:** Acc Bal box value as-is (current account balance shown on form) for each leg
+- **Bal:** new (post-entry) balance — debit `old+amount`, credit `old−amount`
+- **Remarks:** `OldBal=<pre-entry Acc Bal>` (entry-time current balance shown on form)
 - Cash Payment → credit locked Cash In Hand; Cash Received → debit locked Cash In Hand + credit row above debit
 - **Voucher type change:** clears debit/credit account fields, then re-applies Cash In Hand lock if needed
 - **Enter key:** moves to next form field; on Amount → same `handleSave()` as Save button (locked fields skipped in order)
@@ -270,6 +271,10 @@ Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info
 - 2026-08-31: Cash Book **Enter** = next field; Enter on Amount = save (same validation as Save btn).
 - 2026-08-31: Cash Book — voucher type change clears accounts; Voucher # editable → optional **MVNo**; **VNo** always auto; **Bal** = Acc Bal box value.
 - 2026-08-31: Mobile — sidebar/backdrop above page filters; bottom **+** FAB → Cash Book.
+- 2026-09-08: Live deploy of current FE/BE to `https://fatimafs.alicomz.com` (`npm run build` → `/var/www/html/fatimafs`, restart `fatimafs-api`). HTTP→HTTPS 301. Deploy copies in `app-enhancement/deploy/`.
+- 2026-09-09: Credit/Debit table columns reordered in `KindLedgerPage`: Date, REF, Account (bold highlight), Product / Service, Amount, Balance, Created By — matches Cash Book AccName/header style.
+- 2026-09-09: Same Cash Book table header style on Transactions, Search Account, COA, Stock (+ ledger); live deploy to fatimafs.
+- 2026-09-09: Cash Book `Leger.Bal` = **new** balance; `Remarks` = `OldBal=<entry-time Acc Bal>`. Fixed WEB 50755/50756.
 - `knowledge_base/` is the shared coordination folder.
 
 ## Frontend `src/` architecture (2026-08-26 exploration)

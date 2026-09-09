@@ -321,9 +321,12 @@ cashbookRouter.post('/entries', async (req, res) => {
     const dno = await nextDNo(pool, bizId)
     const debitName = cleanText(debitAcc.AccName) || '—'
     const creditName = cleanText(creditAcc.AccName) || '—'
-    // Store Acc Bal box value as-is (current balance shown on form)
-    const debitBal = roundMoney(money(debitAcc.Balance))
-    const creditBal = roundMoney(money(creditAcc.Balance))
+    // Acc Bal box at save time = OLD (pre-entry). Desktop customer rows store NEW in Bal.
+    // Formula: OpBal + SUM(Debit) - SUM(Credit).
+    const debitOldBal = roundMoney(money(debitAcc.Balance))
+    const creditOldBal = roundMoney(money(creditAcc.Balance))
+    const debitNewBal = roundMoney(debitOldBal + amount)
+    const creditNewBal = roundMoney(creditOldBal - amount)
     const mvnoValue = cleanText(mvno).slice(0, 50)
     const descDebit = `${description} From ${creditName}`.slice(0, 1500)
     const descCredit = `${description} From ${debitName}`.slice(0, 1500)
@@ -345,11 +348,12 @@ cashbookRouter.post('/entries', async (req, res) => {
       debitReq.input('description', sql.NVarChar(1500), descDebit)
       debitReq.input('mvno', sql.NVarChar(50), mvnoValue)
       debitReq.input('dno', sql.Int, dno)
-      debitReq.input('bal', sql.NVarChar(50), String(debitBal))
+      debitReq.input('bal', sql.NVarChar(50), String(debitNewBal))
+      debitReq.input('remarks', sql.NVarChar(3500), `OldBal=${debitOldBal}`)
       if (companyInsertCol) debitReq.input('bizId', sql.Int, bizId)
       await debitReq.query(`
         INSERT INTO dbo.Leger (
-          Dated, UserId, Accid, VNo, Type, RefNo, Debit, Description, Timed, MVNo, DNo, Bal${
+          Dated, UserId, Accid, VNo, Type, RefNo, Debit, Description, Timed, MVNo, DNo, Bal, Remarks${
             companyInsertCol ? `, ${companyInsertCol}` : ''
           }
         ) VALUES (
@@ -364,7 +368,8 @@ cashbookRouter.post('/entries', async (req, res) => {
           CAST(GETDATE() AS time),
           @mvno,
           @dno,
-          @bal${companyInsertCol ? ', @bizId' : ''}
+          @bal,
+          @remarks${companyInsertCol ? ', @bizId' : ''}
         )
       `)
 
@@ -379,11 +384,12 @@ cashbookRouter.post('/entries', async (req, res) => {
       creditReq.input('description', sql.NVarChar(1500), descCredit)
       creditReq.input('mvno', sql.NVarChar(50), mvnoValue)
       creditReq.input('dno', sql.Int, dno)
-      creditReq.input('bal', sql.NVarChar(50), String(creditBal))
+      creditReq.input('bal', sql.NVarChar(50), String(creditNewBal))
+      creditReq.input('remarks', sql.NVarChar(3500), `OldBal=${creditOldBal}`)
       if (companyInsertCol) creditReq.input('bizId', sql.Int, bizId)
       await creditReq.query(`
         INSERT INTO dbo.Leger (
-          Dated, UserId, Accid, VNo, Type, RefNo, Credit, Description, Timed, MVNo, DNo, Bal${
+          Dated, UserId, Accid, VNo, Type, RefNo, Credit, Description, Timed, MVNo, DNo, Bal, Remarks${
             companyInsertCol ? `, ${companyInsertCol}` : ''
           }
         ) VALUES (
@@ -398,7 +404,8 @@ cashbookRouter.post('/entries', async (req, res) => {
           CAST(GETDATE() AS time),
           @mvno,
           @dno,
-          @bal${companyInsertCol ? ', @bizId' : ''}
+          @bal,
+          @remarks${companyInsertCol ? ', @bizId' : ''}
         )
       `)
 
