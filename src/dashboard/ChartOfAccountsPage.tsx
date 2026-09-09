@@ -348,33 +348,35 @@ function ChartsLevel({
       </ul>
 
       <section className={`hidden ${panel} rounded-2xl p-4 lg:block lg:p-5`}>
-        <table className="w-full border-collapse">
-          <thead>
-            <tr>
-              {['Chart Name', 'Sub Charts', 'Accounts', ''].map((h) => (
-                <Th key={h || 'action'}>{h}</Th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {charts.map((item) => (
-              <tr
-                key={item.chartId}
-                className="cursor-pointer hover:bg-[#fcfcfd]"
-                onClick={() => onOpen(item)}
-              >
-                <Td className="font-bold text-ink">{item.name}</Td>
-                <Td>{item.subChartCount}</Td>
-                <Td>{item.accountCount}</Td>
-                <Td>
-                  <span className="inline-flex items-center gap-1 text-[0.78rem] font-bold text-[#c99700]">
-                    Open <ChevronRight />
-                  </span>
-                </Td>
+        <div className="overflow-x-auto rounded-xl border border-line">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-[#fafbfc]">
+                {['Chart Name', 'Sub Charts', 'Accounts', ''].map((h) => (
+                  <Th key={h || 'action'}>{h}</Th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {charts.map((item) => (
+                <tr
+                  key={item.chartId}
+                  className="cursor-pointer hover:bg-[#fcfcfd]"
+                  onClick={() => onOpen(item)}
+                >
+                  <Td className="font-semibold text-ink">{item.name}</Td>
+                  <Td>{item.subChartCount}</Td>
+                  <Td>{item.accountCount}</Td>
+                  <Td>
+                    <span className="inline-flex items-center gap-1 text-[0.78rem] font-bold text-[#c99700]">
+                      Open <ChevronRight />
+                    </span>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
     </>
   )
@@ -429,32 +431,34 @@ function SubChartsLevel({
           </ul>
 
           <section className={`hidden ${panel} rounded-2xl p-4 lg:block lg:p-5`}>
-            <table className="w-full border-collapse">
-              <thead>
-                <tr>
-                  {['Sub Chart Name', 'Accounts', ''].map((h) => (
-                    <Th key={h || 'action'}>{h}</Th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {subCharts.map((item) => (
-                  <tr
-                    key={item.groupId}
-                    className="cursor-pointer hover:bg-[#fcfcfd]"
-                    onClick={() => onOpen(item)}
-                  >
-                    <Td className="font-bold text-ink">{item.name}</Td>
-                    <Td>{item.accountCount}</Td>
-                    <Td>
-                      <span className="inline-flex items-center gap-1 text-[0.78rem] font-bold text-[#c99700]">
-                        Open <ChevronRight />
-                      </span>
-                    </Td>
+            <div className="overflow-x-auto rounded-xl border border-line">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-[#fafbfc]">
+                    {['Sub Chart Name', 'Accounts', ''].map((h) => (
+                      <Th key={h || 'action'}>{h}</Th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {subCharts.map((item) => (
+                    <tr
+                      key={item.groupId}
+                      className="cursor-pointer hover:bg-[#fcfcfd]"
+                      onClick={() => onOpen(item)}
+                    >
+                      <Td className="font-semibold text-ink">{item.name}</Td>
+                      <Td>{item.accountCount}</Td>
+                      <Td>
+                        <span className="inline-flex items-center gap-1 text-[0.78rem] font-bold text-[#c99700]">
+                          Open <ChevronRight />
+                        </span>
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
         </>
       )}
@@ -524,44 +528,46 @@ function AccountsLevel({
           </ul>
 
           <section className={`hidden ${panel} rounded-2xl p-4 lg:block lg:p-5`}>
-            <table className="w-full min-w-[720px] border-collapse">
-              <thead>
-                <tr>
-                  {['Account Name', 'Normal Balance', 'Balance (PKR)', 'Status', ''].map((h) => (
-                    <Th key={h || 'action'}>{h}</Th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {accounts.map((item) => (
-                  <tr
-                    key={item.accid}
-                    className="cursor-pointer hover:bg-[#fcfcfd]"
-                    onClick={() => onOpen(item)}
-                  >
-                    <Td className="font-bold text-ink">{item.name}</Td>
-                    <Td>{item.normalBalance}</Td>
-                    <Td
-                      className={
-                        item.normalBalance === 'Credit'
-                          ? 'font-bold text-credit'
-                          : 'font-bold text-ink'
-                      }
-                    >
-                      {formatCoaPkr(item.balance)}
-                    </Td>
-                    <Td>
-                      <StatusPill status={item.status} />
-                    </Td>
-                    <Td>
-                      <span className="inline-flex items-center gap-1 text-[0.78rem] font-bold text-[#c99700]">
-                        Open <ChevronRight />
-                      </span>
-                    </Td>
+            <div className="overflow-x-auto rounded-xl border border-line">
+              <table className="w-full min-w-[720px] border-collapse">
+                <thead>
+                  <tr className="bg-[#fafbfc]">
+                    {['Account', 'Normal Balance', 'Balance (PKR)', 'Status', ''].map((h) => (
+                      <Th key={h || 'action'}>{h}</Th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {accounts.map((item) => (
+                    <tr
+                      key={item.accid}
+                      className="cursor-pointer hover:bg-[#fcfcfd]"
+                      onClick={() => onOpen(item)}
+                    >
+                      <Td className="font-semibold text-ink">{item.name}</Td>
+                      <Td>{item.normalBalance}</Td>
+                      <Td
+                        className={
+                          item.normalBalance === 'Credit'
+                            ? 'font-bold text-credit'
+                            : 'font-bold text-ink'
+                        }
+                      >
+                        {formatCoaPkr(item.balance)}
+                      </Td>
+                      <Td>
+                        <StatusPill status={item.status} />
+                      </Td>
+                      <Td>
+                        <span className="inline-flex items-center gap-1 text-[0.78rem] font-bold text-[#c99700]">
+                          Open <ChevronRight />
+                        </span>
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
         </>
       )}
@@ -617,7 +623,7 @@ function StatusPill({ status }: { status: 'Active' | 'Inactive' }) {
 
 function Th({ children }: { children: ReactNode }) {
   return (
-    <th className="border-b border-line px-2.5 py-3 text-left text-[0.72rem] font-bold tracking-[0.04em] text-muted uppercase whitespace-nowrap">
+    <th className="border-b border-line px-2.5 py-2.5 text-left text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase whitespace-nowrap">
       {children}
     </th>
   )

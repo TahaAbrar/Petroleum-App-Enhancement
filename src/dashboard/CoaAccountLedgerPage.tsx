@@ -269,14 +269,14 @@ export function CoaAccountLedgerPage({ accid, coaPath, homePath }: Props) {
               ))}
             </ul>
 
-            <div className="hidden overflow-x-auto lg:block">
+            <div className="hidden overflow-x-auto rounded-xl border border-line lg:block">
               <table className="w-full min-w-[920px] border-collapse">
                 <thead>
-                  <tr>
+                  <tr className="bg-[#fafbfc]">
                     {COLUMNS.map((h) => (
                       <th
                         key={h}
-                        className="border-b border-line px-2.5 py-3 text-left text-[0.72rem] font-bold tracking-[0.04em] text-muted uppercase whitespace-nowrap"
+                        className="border-b border-line px-2.5 py-2.5 text-left text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase whitespace-nowrap"
                       >
                         {h}
                       </th>

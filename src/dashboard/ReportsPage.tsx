@@ -237,7 +237,7 @@ function StockStatementBrowse({
                 ))}
               </ul>
 
-              <div className="hidden overflow-x-auto lg:block">
+              <div className="hidden overflow-x-auto rounded-xl border border-line lg:block">
                 <table className="w-full min-w-[680px] border-collapse">
                   <colgroup>
                     <col className="w-[28%]" />
@@ -248,7 +248,7 @@ function StockStatementBrowse({
                     <col className="w-[20%]" />
                   </colgroup>
                   <thead>
-                    <tr>
+                    <tr className="bg-[#fafbfc]">
                       <Th align="left">Item Name</Th>
                       <Th align="right">Stock</Th>
                       <Th align="right">Last Rate</Th>
@@ -398,7 +398,7 @@ function Th({
 }) {
   return (
     <th
-      className={`border-b border-line px-2 py-2.5 text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase whitespace-nowrap ${
+      className={`border-b border-line px-2.5 py-2.5 text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase whitespace-nowrap ${
         align === 'right' ? 'text-right' : 'text-left'
       }`}
     >

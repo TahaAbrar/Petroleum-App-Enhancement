@@ -270,6 +270,9 @@ Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info
 - 2026-08-31: Cash Book **Enter** = next field; Enter on Amount = save (same validation as Save btn).
 - 2026-08-31: Cash Book — voucher type change clears accounts; Voucher # editable → optional **MVNo**; **VNo** always auto; **Bal** = Acc Bal box value.
 - 2026-08-31: Mobile — sidebar/backdrop above page filters; bottom **+** FAB → Cash Book.
+- 2026-09-08: Live deploy of current FE/BE to `https://fatimafs.alicomz.com` (`npm run build` → `/var/www/html/fatimafs`, restart `fatimafs-api`). HTTP→HTTPS 301. Deploy copies in `app-enhancement/deploy/`.
+- 2026-09-09: Credit/Debit table columns reordered in `KindLedgerPage`: Date, REF, Account (bold highlight), Product / Service, Amount, Balance, Created By — matches Cash Book AccName/header style.
+- 2026-09-09: Same Cash Book table header style on Transactions, Search Account, COA, Stock (+ ledger); live deploy to fatimafs.
 - `knowledge_base/` is the shared coordination folder.
 
 ## Frontend `src/` architecture (2026-08-26 exploration)
