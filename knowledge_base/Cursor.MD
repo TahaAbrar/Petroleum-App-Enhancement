@@ -275,6 +275,7 @@ Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info
 - 2026-09-09: Credit/Debit table columns reordered in `KindLedgerPage`: Date, REF, Account (bold highlight), Product / Service, Amount, Balance, Created By — matches Cash Book AccName/header style.
 - 2026-09-09: Same Cash Book table header style on Transactions, Search Account, COA, Stock (+ ledger); live deploy to fatimafs.
 - 2026-09-09: Cash Book `Leger.Bal` = **new** balance; `Remarks` = `OldBal=<entry-time Acc Bal>`. Fixed WEB 50755/50756.
+- 2026-09-13: **Login subtitle** — "Sign in to AliComz" → "Sign in to Fatima FS".
 - `knowledge_base/` is the shared coordination folder.
 
 ## Frontend `src/` architecture (2026-08-26 exploration)
