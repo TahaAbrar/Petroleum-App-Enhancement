@@ -78,7 +78,7 @@ app.get('/api/auth/me', requireAuth, meHandler)
 
 const customerLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 60,
+  max: 180,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -96,20 +96,21 @@ app.use(
   customerRouter,
 )
 
-const transactionLimiter = rateLimit({
+/** Shared by transactions, dashboard, COA, reports, cashbook, push — dashboard polls several endpoints. */
+const apiReadLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 60,
+  max: 300,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
     ok: false,
-    message: 'Too many transaction requests. Please wait and try again.',
+    message: 'Too many requests. Please wait and try again.',
   },
 })
 
 app.use(
   '/api/transactions',
-  transactionLimiter,
+  apiReadLimiter,
   requireReadKey,
   requireAuth,
   requireRoles('Administrator', 'Accountant'),
@@ -118,7 +119,7 @@ app.use(
 
 app.use(
   '/api/dashboard',
-  transactionLimiter,
+  apiReadLimiter,
   requireReadKey,
   requireAuth,
   requireRoles('Administrator', 'Accountant'),
@@ -127,7 +128,7 @@ app.use(
 
 app.use(
   '/api/company',
-  transactionLimiter,
+  apiReadLimiter,
   requireReadKey,
   requireAuth,
   requireRoles('Administrator', 'Accountant', 'Customer'),
@@ -136,7 +137,7 @@ app.use(
 
 app.use(
   '/api/portal',
-  transactionLimiter,
+  apiReadLimiter,
   requireReadKey,
   requireAuth,
   requireRoles('Customer'),
@@ -145,7 +146,7 @@ app.use(
 
 app.use(
   '/api/chart-of-accounts',
-  transactionLimiter,
+  apiReadLimiter,
   requireReadKey,
   requireAuth,
   requireRoles('Administrator', 'Accountant'),
@@ -154,7 +155,7 @@ app.use(
 
 app.use(
   '/api/reports',
-  transactionLimiter,
+  apiReadLimiter,
   requireReadKey,
   requireAuth,
   requireRoles('Administrator', 'Accountant'),
@@ -163,7 +164,7 @@ app.use(
 
 app.use(
   '/api/cashbook',
-  transactionLimiter,
+  apiReadLimiter,
   requireReadKey,
   requireAuth,
   requireRoles('Administrator', 'Accountant'),
@@ -172,7 +173,7 @@ app.use(
 
 app.use(
   '/api/push',
-  transactionLimiter,
+  apiReadLimiter,
   requireReadKey,
   requireAuth,
   requireRoles('Administrator', 'Accountant'),

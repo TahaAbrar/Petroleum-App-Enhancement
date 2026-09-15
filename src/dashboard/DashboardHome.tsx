@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getUserRole } from '../lib/auth'
 import { toast } from '../toast'
@@ -108,19 +108,26 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
     }
   }, [])
 
+  const liveTick = useRef(0)
+
   useLiveRefresh(() => {
+    liveTick.current += 1
+    const tick = liveTick.current
     void loadTransactionsPage(EMPTY_TX_FILTERS, 1, { force: true })
       .then((data) => setRows(data.rows))
       .catch(() => {})
     void fetchDashboardStats()
       .then(setStats)
       .catch(() => {})
-    void fetchBanks()
-      .then((data) => {
-        setBanks(data.banks)
-        setBankTotal(data.totalBalance)
-      })
-      .catch(() => {})
+    // Banks change less often — refresh every 2nd poll (~30s)
+    if (tick % 2 === 0) {
+      void fetchBanks()
+        .then((data) => {
+          setBanks(data.banks)
+          setBankTotal(data.totalBalance)
+        })
+        .catch(() => {})
+    }
   })
 
   useEffect(() => {
