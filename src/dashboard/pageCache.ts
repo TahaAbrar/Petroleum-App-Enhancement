@@ -6,11 +6,7 @@ import {
   type CustomerGroup,
   type CustomerStatus,
 } from './customers'
-import {
-  fetchBalanceTrend,
-  fetchCreditDebitChart,
-  fetchDashboardStats,
-} from './dashboard'
+import { fetchCreditDebitChart, fetchDashboardStats, fetchBanks } from './dashboard'
 import {
   fetchKindStats,
   fetchTransactionCustomers,
@@ -48,7 +44,9 @@ export const EMPTY_TX_FILTERS: TransactionListParams = {
   accid: '',
   dateFrom: '',
   dateTo: '',
+  type: '',
   kind: 'all',
+  status: 'unposted',
   sort: 'recent',
 }
 
@@ -91,7 +89,9 @@ export function transactionListKey(params: TransactionListParams) {
     accid: params.accid || '',
     dateFrom: params.dateFrom ?? '',
     dateTo: params.dateTo ?? '',
+    type: params.type ?? '',
     kind: params.kind ?? 'all',
+    status: params.status ?? 'unposted',
     sort: params.sort ?? 'recent',
   })
 }
@@ -136,7 +136,7 @@ export function prefetchDashboardPages() {
   void loadTransactionsPage(EMPTY_TX_FILTERS, 1, { force: true })
   void fetchDashboardStats().catch(() => {})
   void fetchCreditDebitChart().catch(() => {})
-  void fetchBalanceTrend('7d').catch(() => {})
+  void fetchBanks().catch(() => {})
   void fetchKindStats('credit').catch(() => {})
   void fetchKindStats('debit').catch(() => {})
 }
@@ -241,7 +241,9 @@ export async function loadTransactionsPage(
     accid: params.accid || undefined,
     dateFrom: params.dateFrom || undefined,
     dateTo: params.dateTo || undefined,
+    type: params.type || undefined,
     kind: params.kind,
+    status: params.status,
     sort: params.sort,
     page,
     pageSize: TX_PAGE_SIZE,

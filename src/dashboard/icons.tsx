@@ -58,6 +58,16 @@ export function NavIcon({ name }: { name: string }) {
           <path d="M17 17H5l3 3" />
         </svg>
       )
+    case 'sales':
+      return (
+        <svg {...strokeProps}>
+          <path d="M4 19V5" />
+          <path d="M4 19h16" />
+          <path d="M8 15v-4" />
+          <path d="M12 15V8" />
+          <path d="M16 15v-6" />
+        </svg>
+      )
     case 'doc':
       return (
         <svg {...strokeProps}>

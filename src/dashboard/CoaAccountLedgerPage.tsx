@@ -8,7 +8,6 @@ import {
   type CoaAccountDetail,
   type CoaFuelSummary,
   type CoaHistoryKind,
-  type CoaHistorySort,
 } from './chartOfAccounts'
 import { useCoaAccountHistory } from './coa/useCoaAccountHistory'
 import { applyDateRange, DateRangeFilter } from './filters'
@@ -25,11 +24,6 @@ const TABS = [
   ['all', 'Transaction History'],
   ['credit', 'Credit History'],
   ['debit', 'Debit History'],
-] as const
-
-const SORTS = [
-  ['recent', 'Recent'],
-  ['oldest', 'Oldest'],
 ] as const
 
 const COLUMNS = [
@@ -56,9 +50,8 @@ export function CoaAccountLedgerPage({ accid, coaPath, homePath }: Props) {
   const [tab, setTab] = useState<CoaHistoryKind>('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [sort, setSort] = useState<CoaHistorySort>('recent')
 
-  const history = useCoaAccountHistory(accid, tab, dateFrom, dateTo, sort)
+  const history = useCoaAccountHistory(accid, tab, dateFrom, dateTo, 'oldest')
 
   useEffect(() => {
     const ac = new AbortController()
@@ -210,33 +203,20 @@ export function CoaAccountLedgerPage({ accid, coaPath, homePath }: Props) {
               </button>
             ))}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <DateRangeFilter
-              from={dateFrom}
-              to={dateTo}
-              onFromChange={(next) => {
-                const range = applyDateRange('from', next, dateFrom, dateTo)
-                setDateFrom(range.from)
-                setDateTo(range.to)
-              }}
-              onToChange={(next) => {
-                const range = applyDateRange('to', next, dateFrom, dateTo)
-                setDateFrom(range.from)
-                setDateTo(range.to)
-              }}
-            />
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as CoaHistorySort)}
-              className="rounded-xl border border-line bg-white px-3 py-2 text-[0.78rem] font-semibold text-ink"
-            >
-              {SORTS.map(([id, label]) => (
-                <option key={id} value={id}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <DateRangeFilter
+            from={dateFrom}
+            to={dateTo}
+            onFromChange={(next) => {
+              const range = applyDateRange('from', next, dateFrom, dateTo)
+              setDateFrom(range.from)
+              setDateTo(range.to)
+            }}
+            onToChange={(next) => {
+              const range = applyDateRange('to', next, dateFrom, dateTo)
+              setDateFrom(range.from)
+              setDateTo(range.to)
+            }}
+          />
         </div>
 
         {history.loading ? (

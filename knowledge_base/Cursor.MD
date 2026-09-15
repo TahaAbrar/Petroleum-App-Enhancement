@@ -225,7 +225,7 @@ Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info
 1. **Charts** — `ChartAcc` via `GET /api/chart-of-accounts/charts` (counts every `GroupReg` / `AccReg` under the chart, including accounts with no ledger)
 2. **Sub Charts** — all groups for `ChartId`; account count = all `AccReg`; balance from `Leger` + `BizId` (0 if none)
 3. **Accounts** — all `AccReg` in the group (`LEFT JOIN Leger`); ledger-less accounts still listed, balance 0
-4. **Account Ledger** (new page, same shell) — `/chart-of-accounts/account/:accid` (+ accountant/user prefixes). Transactions + fuel summary (HSD/PMG/HO/Advance/Others).
+4. **Account Ledger** (new page, same shell) — `/chart-of-accounts/account/:accid` (+ accountant/user prefixes). Transactions + fuel summary (HSD/PMG/HO/Advance/Others). List always **oldest first** by `Trid ASC` (Recent/Oldest control removed).
 
 ### Files
 - `server/src/coaRoutes.js` — charts, sub-charts, accounts, account detail, transactions, fuel summary (SELECT only; `BizId` from `CompanyPro.CompanyId`)
@@ -276,6 +276,18 @@ Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info
 - 2026-09-09: Same Cash Book table header style on Transactions, Search Account, COA, Stock (+ ledger); live deploy to fatimafs.
 - 2026-09-09: Cash Book `Leger.Bal` = **new** balance; `Remarks` = `OldBal=<entry-time Acc Bal>`. Fixed WEB 50755/50756.
 - 2026-09-13: **Login subtitle** — "Sign in to AliComz" → "Sign in to Fatima FS".
+- 2026-09-13: **Stock ledger** — paginated 20 + scroll more; From/To date filter; ascending by date. FE needs deploy for live site.
+- 2026-09-13: **COA account ledger** — Recent/Oldest dropdown removed; list always oldest-first by `Trid ASC` (JV-449 before JV-450).
+- 2026-09-13: **Date filter spacing** — From/To always grouped in one flex row; narrower date boxes (`9.25rem`).
+- 2026-09-14: **Transactions Group filter** — Type (Credit/Debit) UI removed; Group filter added (unposted only). **COA sub-chart** — From/To + all-account transactions under accounts list; 30/10 infinite scroll; Posted+Unposted.
+- 2026-09-14: **Live deploy** — build → `/var/www/html/fatimafs`; restarted `fatimafs-api`. https://fatimafs.alicomz.com 200.
+- 2026-09-14: **COA tx columns** — sub-chart table = Transactions fields (Date, V.No, Account, Description, Type, Debit, Credit, Acc Bal.) + Total Debit/Credit under table; redeployed (`index-Baxv877O.js`).
+- 2026-09-14: **COA accounts cols** — Normal Balance + Status removed; Debit + Credit totals after Balance; live `index-CoRxvhFB.js`.
+- 2026-09-14: **COA date Search** — default From=month 01 / To=today; Search applies filter to accounts Debit/Credit + transactions; live `index-Bmf0bfzE.js`.
+- 2026-09-15: **Fuel Sales + Sales page** — Balance Trend removed. Dashboard Fuel Sales chart = last 20 PTS DNo (Diesel/Petrol/Udhar=Total−Cash). SELECT-only `GET /api/sales/trend` + `GET /api/sales`. Sales page `/sales` + `/accountant/sales`. View More on chart. No PTS writes.
+- 2026-09-15: **Live deploy** — `index-DGXA3w5b.js` → `/var/www/html/fatimafs`; `fatimafs-api` restarted; site 200 + db:up.
+- 2026-09-15: **Fuel Sales table** — dashboard chart replaced with 20-row table (Date, ItemQty, Rate, Amount, Cash, Udhar); Sales page all columns. Live `index-DcRDOOeS.js`.
+- 2026-09-15: **Dashboard fuel cards + Banks** — Sales page removed. 4 cards Diesel/Petrol/Cash/Udhar; Banks panel with Total Balance. Live `index-DJay2R15.js`.
 - `knowledge_base/` is the shared coordination folder.
 
 ## Frontend `src/` architecture (2026-08-26 exploration)

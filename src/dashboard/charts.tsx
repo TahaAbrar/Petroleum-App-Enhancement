@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import type { BalanceTrendPoint, CreditDebitPoint } from './dashboard'
+import type { CreditDebitPoint } from './dashboard'
 import { formatPkrAmount } from './customers'
 
 /** Placeholder bars so animation can start before the API responds. */
@@ -13,19 +13,8 @@ const PLACEHOLDER_CREDIT_DEBIT: CreditDebitPoint[] = [
   { label: '27', credit: 82, debit: 65 },
 ]
 
-const PLACEHOLDER_TREND: BalanceTrendPoint[] = [
-  { label: '21', value: 42 },
-  { label: '22', value: 48 },
-  { label: '23', value: 45 },
-  { label: '24', value: 58 },
-  { label: '25', value: 62 },
-  { label: '26', value: 70 },
-  { label: '27', value: 78 },
-]
-
-/** Matches CSS: bar ~0.7s + delays; line ~1.55s total */
+/** Matches CSS: bar ~0.7s + delays */
 const BAR_ANIM_MS = 1200
-const LINE_ANIM_MS = 1600
 
 function shortLabel(label: string) {
   const parts = label.trim().split(/\s+/)
@@ -261,184 +250,6 @@ export function CreditDebitChart({ data, loading }: CreditDebitProps) {
             <span className="inline-block size-1.5 rounded-sm bg-ink align-middle" />{' '}
             Debit:{' '}
             <span className="font-extrabold">{formatPkrAmount(hover.debit)}</span>{' '}
-            <span className="font-normal text-muted">PKR</span>
-          </p>
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-type BalanceTrendProps = {
-  data: BalanceTrendPoint[]
-  loading?: boolean
-  rangeKey?: string
-}
-
-export function BalanceTrendChart({ data, loading, rangeKey = '7d' }: BalanceTrendProps) {
-  const live = !loading && data.length > 0 ? data : null
-  const { display: points, animKey } = useAnimatedChartData(
-    live,
-    PLACEHOLDER_TREND,
-    LINE_ANIM_MS,
-    rangeKey,
-  )
-
-  const wrapRef = useRef<HTMLDivElement | null>(null)
-  const [hoverIdx, setHoverIdx] = useState<number | null>(null)
-
-  const w = 520
-  const h = 200
-  const pad = { t: 20, r: 16, b: 36, l: 52 }
-  const innerW = w - pad.l - pad.r
-  const innerH = h - pad.t - pad.b
-  const values = points.map((p) => p.value)
-  const min = Math.min(...values, 0)
-  const max = Math.max(...values, 1)
-  const span = max - min || 1
-
-  const coords = useMemo(
-    () =>
-      points.map((p, i) => {
-        const x = pad.l + (points.length <= 1 ? innerW / 2 : (i / (points.length - 1)) * innerW)
-        const y = pad.t + ((max - p.value) / span) * innerH
-        return { x, y, label: p.label, value: p.value }
-      }),
-    [points, innerW, innerH, max, min, span, pad.l, pad.t],
-  )
-
-  const line = coords.map((p) => `${p.x},${p.y}`).join(' ')
-  const area =
-    coords.length > 0
-      ? `${coords[0].x},${pad.t + innerH} ${line} ${coords[coords.length - 1].x},${pad.t + innerH}`
-      : ''
-
-  function nearestIndex(clientX: number) {
-    const el = wrapRef.current
-    if (!el || coords.length === 0) return null
-    const rect = el.getBoundingClientRect()
-    if (rect.width <= 0) return null
-    const svgX = ((clientX - rect.left) / rect.width) * w
-    let best = 0
-    let bestDist = Math.abs(coords[0].x - svgX)
-    for (let i = 1; i < coords.length; i++) {
-      const dist = Math.abs(coords[i].x - svgX)
-      if (dist < bestDist) {
-        best = i
-        bestDist = dist
-      }
-    }
-    return best
-  }
-
-  function onMove(e: MouseEvent<HTMLDivElement>) {
-    const next = nearestIndex(e.clientX)
-    setHoverIdx((prev) => (next === prev ? prev : next))
-  }
-
-  function onLeave() {
-    setHoverIdx(null)
-  }
-
-  useEffect(() => {
-    setHoverIdx(null)
-  }, [animKey, rangeKey])
-
-  const hover = hoverIdx != null ? coords[hoverIdx] : null
-  const tipPct =
-    hover && w > 0
-      ? {
-          left: `${(hover.x / w) * 100}%`,
-          top: `${(hover.y / h) * 100}%`,
-        }
-      : null
-
-  return (
-    <div
-      ref={wrapRef}
-      className="relative w-full"
-      onMouseMove={onMove}
-      onMouseLeave={onLeave}
-    >
-      <svg
-        key={animKey}
-        className="block h-auto w-full"
-        viewBox={`0 0 ${w} ${h}`}
-        role="img"
-        aria-label="Balance Trend"
-      >
-        {[0, 0.25, 0.5, 0.75, 1].map((t) => {
-          const tick = max - span * t
-          const y = pad.t + t * innerH
-          return (
-            <g key={t}>
-              <line x1={pad.l} y1={y} x2={w - pad.r} y2={y} className="stroke-[#eef0f3]" strokeWidth={1} />
-              <text x={pad.l - 8} y={y + 4} textAnchor="end" className="fill-[#9ca3af] text-[10px]">
-                {formatAxis(tick, true)}
-              </text>
-            </g>
-          )
-        })}
-        {area ? <polygon points={area} className="chart-area fill-fuel/20" /> : null}
-        {line ? (
-          <polyline
-            points={line}
-            fill="none"
-            pathLength={1}
-            className="chart-line stroke-fuel"
-            strokeWidth={3}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        ) : null}
-        {coords.map((p, i) => (
-          <circle
-            key={i}
-            cx={p.x}
-            cy={p.y}
-            r={hoverIdx === i ? 6.5 : 5}
-            className={`chart-dot fill-fuel stroke-white ${hoverIdx === i ? 'opacity-100' : ''}`}
-            strokeWidth={2}
-            style={{ animationDelay: `${0.55 + i * 0.1}s` }}
-          />
-        ))}
-        {hover ? (
-          <line
-            x1={hover.x}
-            y1={pad.t}
-            x2={hover.x}
-            y2={pad.t + innerH}
-            className="stroke-[#d1d5db]"
-            strokeWidth={1}
-            strokeDasharray="4 3"
-          />
-        ) : null}
-        {coords.map((p, i) => (
-          <text
-            key={`${p.label}-${i}`}
-            x={p.x}
-            y={h - 10}
-            textAnchor="middle"
-            className="chart-axis-label fill-[#9ca3af] text-[10px]"
-            style={{ animationDelay: `${0.4 + i * 0.06}s` }}
-          >
-            {shortLabel(p.label)}
-          </text>
-        ))}
-      </svg>
-
-      {hover && tipPct ? (
-        <div
-          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-[calc(100%+10px)] rounded-xl border border-line bg-white px-3 py-2 shadow-[0_10px_24px_rgba(26,29,33,0.14)]"
-          style={{ left: tipPct.left, top: tipPct.top }}
-        >
-          <p className="m-0 text-[0.68rem] font-semibold text-muted">{hover.label}</p>
-          <p
-            className={`mt-0.5 mb-0 whitespace-nowrap text-[0.82rem] font-extrabold tabular-nums ${
-              hover.value < 0 ? 'text-debit' : 'text-ink'
-            }`}
-          >
-            {formatPkrAmount(hover.value)}{' '}
             <span className="font-normal text-muted">PKR</span>
           </p>
         </div>

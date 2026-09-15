@@ -23,9 +23,24 @@ const txQuerySchema = z.object({
   date: optionalIsoDate,
   dateFrom: optionalIsoDate,
   dateTo: optionalIsoDate,
-  sort: z.enum(['recent', 'oldest']).default('recent'),
+  sort: z.enum(['recent', 'oldest']).default('oldest'),
   offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
   limit: z.coerce.number().int().min(1).max(50).default(15),
+})
+
+const groupTxQuerySchema = z.object({
+  kind: z.enum(['all', 'credit', 'debit']).default('all'),
+  date: optionalIsoDate,
+  dateFrom: optionalIsoDate,
+  dateTo: optionalIsoDate,
+  sort: z.enum(['recent', 'oldest']).default('oldest'),
+  offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
+  limit: z.coerce.number().int().min(1).max(50).default(30),
+})
+
+const groupAccountsQuerySchema = z.object({
+  dateFrom: optionalIsoDate,
+  dateTo: optionalIsoDate,
 })
 
 const summaryQuerySchema = z.object({
@@ -268,9 +283,12 @@ coaRouter.get('/charts/:chartId/sub-charts', async (req, res) => {
 
 coaRouter.get('/groups/:groupId/accounts', async (req, res) => {
   const parsed = groupIdSchema.safeParse(req.params.groupId)
-  if (!parsed.success) {
+  const queryParsed = groupAccountsQuerySchema.safeParse(req.query)
+  if (!parsed.success || !queryParsed.success) {
     return res.status(400).json({ ok: false, message: 'Invalid group id' })
   }
+
+  const { from: dateFrom, to: dateTo } = resolveTxDateRange(queryParsed.data)
 
   try {
     const pool = await getPool()
@@ -280,9 +298,15 @@ coaRouter.get('/groups/:groupId/accounts', async (req, res) => {
       .request()
       .input('groupId', sql.Int, parsed.data)
       .input('bizId', sql.Int, bizId)
+      .input('hasFrom', sql.Bit, dateFrom ? 1 : 0)
+      .input('hasTo', sql.Bit, dateTo ? 1 : 0)
+      .input('dateFrom', sql.Date, dateFrom || '1900-01-01')
+      .input('dateTo', sql.Date, dateTo || '1900-01-01')
       .query(`
         SELECT
           SUM(ISNULL(L.Debit, 0)) - SUM(ISNULL(L.Credit, 0)) AS Balance,
+          SUM(ISNULL(L.Debit, 0)) AS TotalDebit,
+          SUM(ISNULL(L.Credit, 0)) AS TotalCredit,
           A.Accid,
           A.AccNo,
           A.AccName,
@@ -295,7 +319,10 @@ coaRouter.get('/groups/:groupId/accounts', async (req, res) => {
         FROM dbo.AccReg A
         INNER JOIN dbo.GroupReg G ON A.GroupId = G.GroupId
         INNER JOIN dbo.ChartAcc C ON G.ChartId = C.ChartId
-        LEFT JOIN dbo.Leger L ON L.Accid = A.Accid AND L.${companyCol} = @bizId
+        LEFT JOIN dbo.Leger L ON L.Accid = A.Accid
+          AND L.${companyCol} = @bizId
+          AND (@hasFrom = 0 OR CAST(L.Dated AS date) >= @dateFrom)
+          AND (@hasTo = 0 OR CAST(L.Dated AS date) <= @dateTo)
         WHERE A.GroupId = @groupId
         GROUP BY
           A.Accid, A.AccNo, A.AccName, A.Ph, A.Urdo, A.Status,
@@ -311,11 +338,174 @@ coaRouter.get('/groups/:groupId/accounts', async (req, res) => {
         phone: cleanText(row.Ph),
         urdu: cleanText(row.Urdo),
         balance: money(row.Balance),
+        totalDebit: money(row.TotalDebit),
+        totalCredit: money(row.TotalCredit),
         status: mapStatus(row.Status),
         normalBalance: normalBalanceForChartType(row.ChartType),
         groupName: cleanText(row.GroupName),
         chartId: row.ChartId,
       })),
+    })
+  } catch (err) {
+    return dbFail(res, err)
+  }
+})
+
+coaRouter.get('/groups/:groupId/transactions', async (req, res) => {
+  const groupParsed = groupIdSchema.safeParse(req.params.groupId)
+  const queryParsed = groupTxQuerySchema.safeParse(req.query)
+  if (!groupParsed.success || !queryParsed.success) {
+    return res.status(400).json({ ok: false, message: 'Invalid request' })
+  }
+
+  const groupId = groupParsed.data
+  const { kind, offset, limit } = queryParsed.data
+  const { from: dateFrom, to: dateTo } = resolveTxDateRange(queryParsed.data)
+
+  try {
+    const pool = await getPool()
+    const exists = await pool
+      .request()
+      .input('groupId', sql.Int, groupId)
+      .query('SELECT GroupId FROM dbo.GroupReg WHERE GroupId = @groupId')
+    if (!exists.recordset[0]) {
+      return res.status(404).json({ ok: false, message: 'Group not found' })
+    }
+
+    const filterSql = `
+      WHERE 1 = 1
+        AND (@hasFrom = 0 OR CAST(Tx.Dated AS date) >= @dateFrom)
+        AND (@hasTo = 0 OR CAST(Tx.Dated AS date) <= @dateTo)
+        AND (
+          @kind = N'all'
+          OR (@kind = N'credit' AND ISNULL(Tx.Credit, 0) > 0)
+          OR (@kind = N'debit' AND ISNULL(Tx.Debit, 0) > 0)
+        )
+    `
+    const cte = `
+      WITH Tx AS (
+        SELECT
+          L.Trid,
+          L.Dated,
+          L.Timed,
+          L.Type,
+          L.VNo,
+          L.Debit,
+          L.Credit,
+          L.Description,
+          L.Bal,
+          L.UserId,
+          L.HSD,
+          L.RHSD,
+          L.PMG,
+          L.RPMG,
+          L.HO,
+          L.RHO,
+          L.Accid,
+          A.AccName,
+          ISNULL(A.OpBal, 0) + SUM(ISNULL(L.Debit, 0) - ISNULL(L.Credit, 0))
+            OVER (PARTITION BY L.Accid ORDER BY L.Trid ROWS UNBOUNDED PRECEDING) AS RunningBalance
+        FROM dbo.Leger L
+        INNER JOIN dbo.AccReg A ON A.Accid = L.Accid
+        WHERE A.GroupId = @groupId
+      )
+    `
+
+    const countReq = pool.request()
+    countReq.input('groupId', sql.Int, groupId)
+    countReq.input('kind', sql.NVarChar(10), kind)
+    countReq.input('hasFrom', sql.Bit, dateFrom ? 1 : 0)
+    countReq.input('hasTo', sql.Bit, dateTo ? 1 : 0)
+    countReq.input('dateFrom', sql.Date, dateFrom || '1900-01-01')
+    countReq.input('dateTo', sql.Date, dateTo || '1900-01-01')
+    const countResult = await countReq.query(`
+      ${cte}
+      SELECT
+        COUNT(*) AS Total,
+        SUM(ISNULL(Tx.Debit, 0)) AS TotalDebit,
+        SUM(ISNULL(Tx.Credit, 0)) AS TotalCredit
+      FROM Tx
+      ${filterSql}
+    `)
+    const total = money(countResult.recordset[0]?.Total)
+    const totalDebit = money(countResult.recordset[0]?.TotalDebit)
+    const totalCredit = money(countResult.recordset[0]?.TotalCredit)
+
+    const listReq = pool.request()
+    listReq.input('groupId', sql.Int, groupId)
+    listReq.input('kind', sql.NVarChar(10), kind)
+    listReq.input('hasFrom', sql.Bit, dateFrom ? 1 : 0)
+    listReq.input('hasTo', sql.Bit, dateTo ? 1 : 0)
+    listReq.input('dateFrom', sql.Date, dateFrom || '1900-01-01')
+    listReq.input('dateTo', sql.Date, dateTo || '1900-01-01')
+    listReq.input('offset', sql.Int, offset)
+    listReq.input('limit', sql.Int, limit)
+    const listResult = await listReq.query(`
+      ${cte}
+      SELECT
+        Tx.Trid,
+        Tx.Dated,
+        Tx.Timed,
+        Tx.Type,
+        Tx.VNo,
+        Tx.Debit,
+        Tx.Credit,
+        Tx.Description,
+        Tx.Bal,
+        Tx.HSD,
+        Tx.RHSD,
+        Tx.PMG,
+        Tx.RPMG,
+        Tx.HO,
+        Tx.RHO,
+        Tx.Accid,
+        Tx.AccName,
+        Tx.RunningBalance,
+        U.UserName,
+        U.Type AS UserType
+      FROM Tx
+      LEFT JOIN dbo.UserReg U ON U.UserId = Tx.UserId
+      ${filterSql}
+      ORDER BY Tx.Trid ASC
+      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+    `)
+
+    const transactions = listResult.recordset.map((row) => {
+      const { type, amount } = mapAmount(row, kind)
+      const product = productFields(row)
+      const debit = money(row.Debit)
+      const credit = money(row.Credit)
+      return {
+        trid: row.Trid,
+        id: txDisplayId(row.Type, row.VNo, row.Trid),
+        vno: row.VNo != null && row.VNo !== '' ? String(row.VNo) : '—',
+        when: formatWhen(row.Dated, row.Timed),
+        type,
+        paymentType: cleanText(row.Type) || '—',
+        product: product.product,
+        quantity: product.quantity,
+        rate: product.rate,
+        amount,
+        debit,
+        credit,
+        description: cleanText(row.Description) || '—',
+        balance:
+          row.Bal != null && String(row.Bal).trim() !== ''
+            ? money(row.Bal)
+            : money(row.RunningBalance),
+        by: cleanText(row.UserName) || cleanText(row.UserType) || '—',
+        accid: row.Accid,
+        customer: cleanText(row.AccName) || '—',
+      }
+    })
+
+    return res.json({
+      ok: true,
+      total,
+      offset,
+      limit,
+      summary: { totalDebit, totalCredit },
+      transactions,
     })
   } catch (err) {
     return dbFail(res, err)
@@ -437,7 +627,7 @@ coaRouter.get('/accounts/:accid/transactions', async (req, res) => {
   }
 
   const accid = accidParsed.data
-  const { kind, sort, offset, limit } = queryParsed.data
+  const { kind, offset, limit } = queryParsed.data
   const { from: dateFrom, to: dateTo } = resolveTxDateRange(queryParsed.data)
 
   try {
@@ -508,7 +698,6 @@ coaRouter.get('/accounts/:accid/transactions', async (req, res) => {
     listReq.input('hasTo', sql.Bit, dateTo ? 1 : 0)
     listReq.input('dateFrom', sql.Date, dateFrom || '1900-01-01')
     listReq.input('dateTo', sql.Date, dateTo || '1900-01-01')
-    listReq.input('sort', sql.NVarChar(10), sort)
     listReq.input('offset', sql.Int, offset)
     listReq.input('limit', sql.Int, limit)
     const listResult = await listReq.query(`
@@ -534,11 +723,7 @@ coaRouter.get('/accounts/:accid/transactions', async (req, res) => {
       FROM Tx
       LEFT JOIN dbo.UserReg U ON U.UserId = Tx.UserId
       ${filterSql}
-      ORDER BY
-        CASE WHEN @sort = N'recent' THEN Tx.Dated END DESC,
-        CASE WHEN @sort = N'recent' THEN Tx.Trid END DESC,
-        CASE WHEN @sort = N'oldest' THEN Tx.Dated END ASC,
-        CASE WHEN @sort = N'oldest' THEN Tx.Trid END ASC
+      ORDER BY Tx.Trid ASC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `)
 
