@@ -3,6 +3,7 @@ import { apiGet, apiPost } from '../lib/api'
 export type TxType = 'Credit' | 'Debit'
 export type TxKind = 'all' | 'credit' | 'debit'
 export type TxSort = 'recent' | 'oldest'
+export type TxStatusFilter = 'unposted' | 'all'
 
 export type TransactionRow = {
   trid: number
@@ -45,7 +46,9 @@ export type TransactionListParams = {
   accid?: number | ''
   dateFrom?: string
   dateTo?: string
+  type?: string
   kind?: TxKind
+  status?: TxStatusFilter
   sort?: TxSort
 }
 
@@ -199,7 +202,9 @@ export async function fetchTransactions(
   if (params.accid) search.set('accid', String(params.accid))
   if (params.dateFrom) search.set('dateFrom', params.dateFrom)
   if (params.dateTo) search.set('dateTo', params.dateTo)
+  if (params.type) search.set('type', params.type)
   search.set('kind', params.kind ?? 'all')
+  search.set('status', params.status ?? 'unposted')
   search.set('sort', params.sort ?? 'oldest')
   search.set('page', String(params.page ?? 1))
   search.set('pageSize', String(params.pageSize ?? 20))

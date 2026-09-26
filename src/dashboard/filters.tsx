@@ -6,9 +6,9 @@ const boxBase =
   'relative flex items-center gap-1.5 border bg-white font-semibold text-ink'
 
 const variants = {
-  box: `${boxBase} h-10 w-full min-w-0 rounded-xl border-line px-2 text-[0.72rem] shadow-[0_2px_8px_rgba(26,29,33,0.04)] focus-within:border-fuel sm:h-11 sm:gap-2 sm:px-3 sm:text-[0.82rem] lg:w-[11.5rem]`,
-  boxFull: `${boxBase} h-10 w-full min-w-0 rounded-xl border-line px-2 text-[0.72rem] shadow-[0_2px_8px_rgba(26,29,33,0.04)] focus-within:border-fuel sm:h-11 sm:gap-2 sm:px-3 sm:text-[0.82rem]`,
-  pill: `${boxBase} h-9 w-[9.75rem] rounded-full border-line px-3 text-[0.72rem]`,
+  box: `${boxBase} h-10 w-full min-w-0 rounded-xl border-line px-2 text-[0.72rem] shadow-[0_2px_8px_rgba(26,29,33,0.04)] focus-within:border-fuel sm:h-11 sm:gap-1.5 sm:px-2.5 sm:text-[0.82rem] lg:w-[9.25rem]`,
+  boxFull: `${boxBase} h-10 w-full min-w-0 rounded-xl border-line px-2 text-[0.72rem] shadow-[0_2px_8px_rgba(26,29,33,0.04)] focus-within:border-fuel sm:h-11 sm:gap-1.5 sm:px-2.5 sm:text-[0.82rem]`,
+  pill: `${boxBase} h-9 w-[8.75rem] rounded-full border-line px-2.5 text-[0.72rem]`,
 } as const
 
 export type FilterVariant = 'box' | 'pill'
@@ -58,7 +58,6 @@ export function DateRangeFilter({
       />
     </>
   )
-  if (!grouped) return pills
   return (
     <div
       className={`flex items-center gap-1.5 ${fullWidth ? 'w-full' : ''}`}

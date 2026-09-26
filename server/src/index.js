@@ -26,6 +26,10 @@ app.use(
   cors({
     origin(origin, cb) {
       if (!origin || env.corsOrigin.includes(origin)) return cb(null, true)
+      // Cursor / IDE port-forward uses random localhost ports (e.g. :45783)
+      if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) {
+        return cb(null, true)
+      }
       // Vite `--host 0.0.0.0` sends Origin as the public/LAN URL, not localhost
       if (env.nodeEnv !== 'production' && /^https?:\/\//.test(origin)) return cb(null, true)
       return cb(new Error('Not allowed by CORS'))
@@ -78,7 +82,7 @@ app.get('/api/auth/me', requireAuth, meHandler)
 
 const customerLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 60,
+  max: 180,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -96,20 +100,21 @@ app.use(
   customerRouter,
 )
 
-const transactionLimiter = rateLimit({
+/** Shared by transactions, dashboard, COA, reports, cashbook, push — dashboard polls several endpoints. */
+const apiReadLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 60,
+  max: 300,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
     ok: false,
-    message: 'Too many transaction requests. Please wait and try again.',
+    message: 'Too many requests. Please wait and try again.',
   },
 })
 
 app.use(
   '/api/transactions',
-  transactionLimiter,
+  apiReadLimiter,
   requireReadKey,
   requireAuth,
   requireRoles('Administrator', 'Accountant'),
@@ -118,7 +123,7 @@ app.use(
 
 app.use(
   '/api/dashboard',
-  transactionLimiter,
+  apiReadLimiter,
   requireReadKey,
   requireAuth,
   requireRoles('Administrator', 'Accountant'),
@@ -127,7 +132,7 @@ app.use(
 
 app.use(
   '/api/company',
-  transactionLimiter,
+  apiReadLimiter,
   requireReadKey,
   requireAuth,
   requireRoles('Administrator', 'Accountant', 'Customer'),
@@ -136,7 +141,7 @@ app.use(
 
 app.use(
   '/api/portal',
-  transactionLimiter,
+  apiReadLimiter,
   requireReadKey,
   requireAuth,
   requireRoles('Customer'),
@@ -145,7 +150,7 @@ app.use(
 
 app.use(
   '/api/chart-of-accounts',
-  transactionLimiter,
+  apiReadLimiter,
   requireReadKey,
   requireAuth,
   requireRoles('Administrator', 'Accountant'),
@@ -154,7 +159,7 @@ app.use(
 
 app.use(
   '/api/reports',
-  transactionLimiter,
+  apiReadLimiter,
   requireReadKey,
   requireAuth,
   requireRoles('Administrator', 'Accountant'),
@@ -163,7 +168,7 @@ app.use(
 
 app.use(
   '/api/cashbook',
-  transactionLimiter,
+  apiReadLimiter,
   requireReadKey,
   requireAuth,
   requireRoles('Administrator', 'Accountant'),
@@ -172,7 +177,7 @@ app.use(
 
 app.use(
   '/api/push',
-  transactionLimiter,
+  apiReadLimiter,
   requireReadKey,
   requireAuth,
   requireRoles('Administrator', 'Accountant'),

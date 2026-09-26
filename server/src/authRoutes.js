@@ -13,11 +13,15 @@ import { env } from './config.js'
 
 const COOKIE_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000
 
-function setAuthCookie(res, token) {
+function setAuthCookie(res, token, req) {
+  // COOKIE_SECURE=true is for HTTPS prod; Cursor/local http must not get Secure cookies
+  const secure =
+    env.cookieSecure &&
+    Boolean(req?.secure || req?.headers?.['x-forwarded-proto'] === 'https')
   res.cookie('fl_token', token, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: env.cookieSecure,
+    secure,
     maxAge: COOKIE_MAX_AGE_MS,
     path: '/',
   })
@@ -115,7 +119,7 @@ export async function loginHandler(req, res) {
       role,
     })
 
-    setAuthCookie(res, token)
+    setAuthCookie(res, token, req)
 
     return res.json({
       ok: true,
@@ -164,7 +168,7 @@ export async function loginHandler(req, res) {
     name: displayName,
   })
 
-  setAuthCookie(res, token)
+  setAuthCookie(res, token, req)
 
   return res.json({
     ok: true,

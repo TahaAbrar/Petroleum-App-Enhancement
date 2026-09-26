@@ -203,7 +203,7 @@ export default function LoginPage() {
               </div>
               <div>
                 <h1 className="m-0 text-[1.55rem] font-extrabold tracking-[-0.03em]">Welcome back</h1>
-                <p className="mt-1 text-sm font-medium text-muted">Sign in to AliComz</p>
+                <p className="mt-1 text-sm font-medium text-muted">Sign in to Fatima FS</p>
               </div>
             </header>
 

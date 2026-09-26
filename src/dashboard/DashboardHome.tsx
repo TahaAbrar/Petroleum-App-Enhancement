@@ -1,17 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getUserRole } from '../lib/auth'
 import { toast } from '../toast'
 import { formatPkrAmount } from './customers'
-import { BalanceTrendChart, CreditDebitChart } from './charts'
 import {
   EMPTY_DASHBOARD_STATS,
-  fetchBalanceTrend,
-  fetchCreditDebitChart,
+  fetchBanks,
   fetchDashboardStats,
-  type BalanceTrendPoint,
-  type ChartRange,
-  type CreditDebitPoint,
+  type BankRow,
   type DashboardStats,
 } from './dashboard'
 import { StatIcon } from './icons'
@@ -26,7 +22,7 @@ import {
   peekTransactions,
 } from './pageCache'
 import { notifyDataChanged, useLiveRefresh } from './liveRefresh'
-import { panel, selectBtn } from './styles'
+import { panel } from './styles'
 import {
   DeleteTxModal,
   EditAccidModal,
@@ -53,12 +49,6 @@ type Props = {
 
 const RECENT_LIMIT = 5
 
-const RANGE_OPTIONS: { value: ChartRange; label: string }[] = [
-  { value: '7d', label: '7 Days' },
-  { value: '1m', label: '1 Month' },
-  { value: '6m', label: '6 Months' },
-]
-
 export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Props) {
   const navigate = useNavigate()
   const role = getUserRole()
@@ -71,12 +61,9 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
   const [loading, setLoading] = useState(() => !seeded)
   const [stats, setStats] = useState<DashboardStats>(EMPTY_DASHBOARD_STATS)
   const [statsLoading, setStatsLoading] = useState(true)
-  const [creditDebit, setCreditDebit] = useState<CreditDebitPoint[]>([])
-  const [creditDebitLoading, setCreditDebitLoading] = useState(true)
-  const [trendRange, setTrendRange] = useState<ChartRange>('7d')
-  const [balanceTrend, setBalanceTrend] = useState<BalanceTrendPoint[]>([])
-  const [trendLoading, setTrendLoading] = useState(true)
-  const [rangeOpen, setRangeOpen] = useState(false)
+  const [banks, setBanks] = useState<BankRow[]>([])
+  const [bankTotal, setBankTotal] = useState(0)
+  const [banksLoading, setBanksLoading] = useState(true)
   const [deleteRow, setDeleteRow] = useState<TransactionRow | null>(null)
   const [deleteStep, setDeleteStep] = useState<'confirm' | 'password'>('confirm')
   const [adminPassword, setAdminPassword] = useState('')
@@ -116,26 +103,26 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
     }
   }, [])
 
+  const liveTick = useRef(0)
+
   useLiveRefresh(() => {
+    liveTick.current += 1
+    const tick = liveTick.current
     void loadTransactionsPage(EMPTY_TX_FILTERS, 1, { force: true })
       .then((data) => setRows(data.rows))
       .catch(() => {})
     void fetchDashboardStats()
       .then(setStats)
       .catch(() => {})
-    void fetchBalanceTrend(trendRange)
-      .then((data) => {
-        setBalanceTrend((prev) => {
-          if (
-            prev.length === data.length &&
-            prev.every((p, i) => p.label === data[i].label && p.value === data[i].value)
-          ) {
-            return prev
-          }
-          return data
+    // Banks change less often — refresh every 2nd poll (~30s)
+    if (tick % 2 === 0) {
+      void fetchBanks()
+        .then((data) => {
+          setBanks(data.banks)
+          setBankTotal(data.totalBalance)
         })
-      })
-      .catch(() => {})
+        .catch(() => {})
+    }
   })
 
   useEffect(() => {
@@ -164,39 +151,27 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
 
   useEffect(() => {
     let cancelled = false
-    setCreditDebitLoading(true)
-    fetchCreditDebitChart()
+    setBanksLoading(true)
+    fetchBanks()
       .then((data) => {
-        if (!cancelled) setCreditDebit(data)
+        if (!cancelled) {
+          setBanks(data.banks)
+          setBankTotal(data.totalBalance)
+        }
       })
       .catch(() => {
-        if (!cancelled) setCreditDebit([])
+        if (!cancelled) {
+          setBanks([])
+          setBankTotal(0)
+        }
       })
       .finally(() => {
-        if (!cancelled) setCreditDebitLoading(false)
+        if (!cancelled) setBanksLoading(false)
       })
     return () => {
       cancelled = true
     }
   }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    setTrendLoading(true)
-    fetchBalanceTrend(trendRange)
-      .then((data) => {
-        if (!cancelled) setBalanceTrend(data)
-      })
-      .catch(() => {
-        if (!cancelled) setBalanceTrend([])
-      })
-      .finally(() => {
-        if (!cancelled) setTrendLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [trendRange])
 
   const filteredTx = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -349,7 +324,100 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
     },
   ]
 
-  const rangeLabel = RANGE_OPTIONS.find((o) => o.value === trendRange)?.label ?? '7 Days'
+  function fmtLiters(n: number) {
+    return n.toLocaleString('en-US', { maximumFractionDigits: 2 })
+  }
+
+  const fuelColumns = [
+    {
+      id: 'diesel',
+      title: 'Diesel',
+      rows: [
+        { label: 'Total Diesel Sale', value: stats.dieselSale },
+        { label: 'Total Diesel Udhar Sale', value: stats.dieselUdhar },
+        { label: 'Total Diesel Cash Sale', value: stats.dieselCash },
+      ],
+    },
+    {
+      id: 'petrol',
+      title: 'Petrol',
+      rows: [
+        { label: 'Total Petrol Sale', value: stats.petrolSale },
+        { label: 'Total Petrol Udhar Sale', value: stats.petrolUdhar },
+        { label: 'Total Petrol Cash Sale', value: stats.petrolCash },
+      ],
+    },
+  ]
+
+  function renderStatCard(
+    s: {
+      id: string
+      label: string
+      value: string
+      unit?: string
+      isPkr?: boolean
+      icon: 'customers' | 'credit' | 'debit' | 'tx'
+      mobileSpan: 'full' | 'half'
+      highlightLabel?: boolean
+    },
+    i: number,
+  ) {
+    const isHalf = s.mobileSpan === 'half'
+    return (
+      <article
+        key={s.id}
+        className={`${panel} rounded-3xl ${
+          isHalf
+            ? 'col-span-1 flex flex-col gap-1.5 p-3.5 xl:flex-row xl:items-start xl:gap-3 xl:p-4'
+            : 'col-span-2 flex items-center gap-3 p-4 xl:col-span-1 xl:items-start'
+        }`}
+        style={{ animationDelay: `${0.05 + i * 0.05}s` }}
+      >
+        <div
+          className={`shrink-0 place-items-center rounded-full bg-fuel text-ink ${
+            isHalf ? 'hidden size-11 xl:grid' : 'grid size-11'
+          }`}
+        >
+          <StatIcon name={s.icon} />
+        </div>
+        <div className="min-w-0 w-full">
+          <p
+            className={`m-0 font-extrabold leading-tight tracking-[-0.01em] text-ink ${
+              isHalf ? 'text-[0.78rem] xl:text-[0.82rem]' : 'text-[0.85rem]'
+            }`}
+          >
+            {s.label}
+          </p>
+          <h3
+            className={`mt-1 mb-0 font-semibold tracking-[-0.02em] text-ink whitespace-nowrap ${
+              isHalf
+                ? 'text-[1rem] leading-none xl:text-[1.1rem]'
+                : 'text-[1.25rem] leading-tight xl:text-[1.2rem]'
+            }`}
+          >
+            {s.value}
+            {s.isPkr ? (
+              <span
+                className={`ml-1 font-semibold text-muted ${
+                  isHalf ? 'text-[0.72rem]' : 'text-[0.78rem]'
+                }`}
+              >
+                PKR
+              </span>
+            ) : s.unit ? (
+              <span
+                className={`ml-1.5 inline-block font-extrabold text-ink ${
+                  isHalf ? 'text-[0.85rem]' : 'text-[0.9rem]'
+                }`}
+              >
+                {s.unit}
+              </span>
+            ) : null}
+          </h3>
+        </div>
+      </article>
+    )
+  }
 
   return (
     <>
@@ -362,122 +430,88 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
         />
       ) : null}
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-4 xl:gap-4" aria-label="Summary">
-        {statCards.map((s, i) => {
-          const isHalf = s.mobileSpan === 'half'
-          return (
-            <article
-              key={s.id}
-              className={`${panel} rounded-3xl ${
-                isHalf
-                  ? 'col-span-1 flex flex-col gap-1.5 p-3.5 xl:flex-row xl:items-start xl:gap-3 xl:p-4'
-                  : 'col-span-2 flex items-center gap-3 p-4 xl:col-span-1 xl:items-start'
-              }`}
-              style={{ animationDelay: `${0.05 + i * 0.05}s` }}
-            >
-              <div
-                className={`shrink-0 place-items-center rounded-full bg-fuel text-ink ${
-                  isHalf ? 'hidden size-11 xl:grid' : 'grid size-11'
-                }`}
-              >
-                <StatIcon name={s.icon} />
-              </div>
-              <div className="min-w-0 w-full">
-                <p
-                  className={`m-0 font-semibold text-muted ${
-                    isHalf ? 'text-[0.72rem] leading-tight' : 'text-[0.8rem]'
-                  }`}
-                >
-                  {s.label}
-                </p>
-                <h3
-                  className={`mt-1 mb-0 font-extrabold tracking-[-0.02em] text-ink whitespace-nowrap ${
-                    isHalf
-                      ? 'text-[1rem] leading-none xl:text-[1.15rem]'
-                      : 'text-[1.35rem] leading-tight xl:text-[1.25rem]'
-                  }`}
-                >
-                  {s.value}
-                  {s.isPkr ? (
-                    <span
-                      className={`ml-1 font-normal text-muted ${
-                        isHalf ? 'text-[0.68rem]' : 'text-[0.75rem]'
-                      }`}
-                    >
-                      PKR
-                    </span>
-                  ) : s.unit ? (
-                    <span
-                      className={`ml-1 font-bold text-muted ${
-                        isHalf ? 'text-[0.68rem]' : 'text-[0.75rem]'
-                      }`}
-                    >
-                      {s.unit}
-                    </span>
-                  ) : null}
-                </h3>
-              </div>
-            </article>
-          )
-        })}
+        {statCards.map((s, i) => renderStatCard(s, i))}
       </section>
 
       <section className="grid grid-cols-1 gap-3.5 xl:grid-cols-2 xl:gap-4" aria-label="Analytics">
         <article className={`${panel} rounded-3xl p-4`} style={{ animationDelay: '0.22s' }}>
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="m-0 text-[0.95rem] font-extrabold tracking-[-0.01em] xl:text-base">
-              Credit vs Debit
-            </h2>
-            <div className="flex items-center gap-2.5 text-[0.65rem] font-semibold text-muted xl:text-xs">
-              <span className="inline-flex items-center gap-1">
-                <i className="inline-block size-2 rounded-sm bg-fuel" /> Credit
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <i className="inline-block size-2 rounded-sm bg-ink" /> Debit
-              </span>
-            </div>
+          <h2 className="mb-3 mt-0 text-[0.95rem] font-extrabold tracking-[-0.01em] xl:text-base">
+            Fuel Sales
+          </h2>
+          <div className="grid grid-cols-2 gap-3 xl:gap-4">
+            {fuelColumns.map((col) => (
+              <div key={col.id} className="min-w-0">
+                <p className="mb-2 mt-0 text-[0.78rem] font-extrabold uppercase tracking-[0.04em] text-ink xl:text-[0.82rem]">
+                  {col.title}
+                </p>
+                <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
+                  {col.rows.map((row) => (
+                    <li key={row.label} className="min-w-0 border-t border-line pt-2 first:border-0 first:pt-0">
+                      <p className="m-0 text-[0.72rem] font-bold leading-tight text-muted xl:text-[0.78rem]">
+                        {row.label}
+                      </p>
+                      <p className="mt-1 mb-0 text-[1rem] font-semibold leading-none tracking-[-0.02em] tabular-nums text-ink xl:text-[1.1rem]">
+                        {statsLoading ? '…' : fmtLiters(row.value)}
+                        {!statsLoading ? (
+                          <span className="ml-1.5 inline-block text-[0.85rem] font-extrabold text-ink">
+                            L
+                          </span>
+                        ) : null}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
-          <CreditDebitChart data={creditDebit} loading={creditDebitLoading} />
         </article>
 
-        <article className={`${panel} rounded-3xl p-4`} style={{ animationDelay: '0.26s' }}>
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="m-0 text-[0.95rem] font-extrabold tracking-[-0.01em] xl:text-base">
-              Balance Trend
+        <article className={`${panel} flex flex-col rounded-3xl p-4`} style={{ animationDelay: '0.26s' }}>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="m-0 shrink-0 text-[0.95rem] font-extrabold tracking-[-0.01em] xl:text-base">
+              Banks
             </h2>
-            <div className="relative">
-              <button
-                type="button"
-                className={`${selectBtn} text-[0.65rem]`}
-                onClick={() => setRangeOpen((v) => !v)}
-                aria-expanded={rangeOpen}
-              >
-                {rangeLabel}
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                </svg>
-              </button>
-              {rangeOpen ? (
-                <div className="absolute right-0 z-20 mt-1 min-w-[8rem] overflow-hidden rounded-xl border border-line bg-white py-1 shadow-[0_12px_28px_rgba(26,29,33,0.14)]">
-                  {RANGE_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      className={`block w-full border-0 bg-transparent px-3.5 py-2 text-left text-[0.78rem] font-semibold hover:bg-[#f7f8fa] ${
-                        opt.value === trendRange ? 'text-ink' : 'text-muted'
-                      }`}
-                      onClick={() => {
-                        setTrendRange(opt.value)
-                        setRangeOpen(false)
-                      }}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
+            <div className="rounded-xl border border-line bg-[#fafbfc] px-3 py-1.5 text-right">
+              <p className="m-0 text-[0.62rem] font-semibold leading-tight text-muted">Total Balance</p>
+              <p className="mt-0.5 mb-0 whitespace-nowrap text-[0.85rem] font-extrabold leading-none tracking-[-0.02em] tabular-nums text-ink">
+                {banksLoading ? '…' : formatPkrAmount(bankTotal)}
+                {!banksLoading ? (
+                  <span className="ml-1 text-[0.65rem] font-normal text-muted">PKR</span>
+                ) : null}
+              </p>
             </div>
           </div>
-          <BalanceTrendChart data={balanceTrend} loading={trendLoading} rangeKey={trendRange} />
+
+          {banksLoading && banks.length === 0 ? (
+            <LoadingHint label="Loading banks…" />
+          ) : banks.length === 0 ? (
+            <p className="my-6 text-center text-sm font-semibold text-muted">No banks found.</p>
+          ) : (
+            <div className="max-h-[220px] min-h-0 min-w-0 flex-1 overflow-auto rounded-xl border border-line">
+              <table className="w-full border-collapse">
+                <thead className="sticky top-0 z-[1]">
+                  <tr className="border-b border-line bg-[#fafbfc] text-left text-[0.65rem] font-bold uppercase tracking-[0.03em] text-muted">
+                    <th className="px-3 py-2">Bank</th>
+                    <th className="px-3 py-2 text-right">Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {banks.map((bank) => (
+                    <tr key={bank.accid} className="border-b border-line last:border-0">
+                      <td className="px-3 py-2 text-[0.8rem] font-semibold text-ink">{bank.name}</td>
+                      <td
+                        className={`px-3 py-2 text-right text-[0.8rem] font-semibold tabular-nums ${
+                          bank.balance < 0 ? 'text-debit' : 'text-ink'
+                        }`}
+                      >
+                        {formatPkrAmount(bank.balance)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </article>
       </section>
 

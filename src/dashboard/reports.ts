@@ -48,9 +48,24 @@ export type StockLedger = {
   openingStock: number
   dateFrom: string
   dateTo: string
+  total: number
+  offset: number
+  limit: number
   entries: StockLedgerEntry[]
   totals: StockLedgerTotals
 }
+
+export type StockLedgerParams = {
+  dateFrom?: string
+  dateTo?: string
+  offset?: number
+  limit?: number
+}
+
+/** First page size + each scroll batch. */
+export const STOCK_LEDGER_PAGE = 20
+/** Reveal / prefetch next page after scrolling ~this many rows of the latest batch. */
+export const STOCK_LEDGER_SCROLL_TRIGGER = 10
 
 export function formatStockQty(value: number) {
   return value.toLocaleString('en-US', {
@@ -104,9 +119,19 @@ export async function fetchStockStatement(signal?: AbortSignal) {
   return { items: data.items, totalStockValue: data.totalStockValue }
 }
 
-export async function fetchStockLedger(itemId: number, signal?: AbortSignal) {
+export async function fetchStockLedger(
+  itemId: number,
+  params: StockLedgerParams = {},
+  signal?: AbortSignal,
+) {
+  const search = new URLSearchParams()
+  if (params.dateFrom) search.set('dateFrom', params.dateFrom)
+  if (params.dateTo) search.set('dateTo', params.dateTo)
+  search.set('offset', String(params.offset ?? 0))
+  search.set('limit', String(params.limit ?? STOCK_LEDGER_PAGE))
+  const qs = search.toString()
   const data = await apiGet<{ ok: true } & StockLedger>(
-    `/api/reports/stock-statement/${itemId}`,
+    `/api/reports/stock-statement/${itemId}?${qs}`,
     { signal },
   )
   return data

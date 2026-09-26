@@ -6,8 +6,10 @@ import { applyDateRange, DateRangeFilter, MenuFilter, SearchableCustomerFilter }
 import { LoadingHint } from './loading'
 import { PkrValue } from './customerDetails/ui'
 import {
+  loadCustomerGroups,
   loadTransactionCustomers,
   loadTransactionsPage,
+  peekCustomerGroups,
   peekTransactionCustomers,
   peekTransactions,
   clearPageCache,
@@ -34,9 +36,9 @@ import {
   type TransactionListParams,
   type TransactionRow,
   type TransactionSummary,
-  type TxKind,
   type TxSort,
 } from './transactions'
+import type { CustomerGroup } from './customers'
 
 type Props = {
   homePath: string
@@ -47,14 +49,19 @@ type DraftFilters = {
   accid: string
   dateFrom: string
   dateTo: string
-  kind: TxKind
+  type: string
 }
 
-const EMPTY_DRAFT: DraftFilters = {
-  accid: '',
-  dateFrom: '',
-  dateTo: '',
-  kind: 'all',
+type AppliedFilters = DraftFilters & {
+  status: 'unposted' | 'all'
+}
+
+function defaultMonthDateRange() {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return { from: `${y}-${m}-01`, to: `${y}-${m}-${d}` }
 }
 
 export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
@@ -64,24 +71,40 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
   const canDelete = role === 'Administrator'
   const customersPath = role === 'Accountant' ? '/accountant/customers' : '/customers'
 
-  const [draft, setDraft] = useState<DraftFilters>(EMPTY_DRAFT)
+  const defaults = useMemo(() => defaultMonthDateRange(), [])
+  const [draft, setDraft] = useState<DraftFilters>(() => ({
+    accid: '',
+    dateFrom: defaults.from,
+    dateTo: defaults.to,
+    type: '',
+  }))
+  const [applied, setApplied] = useState<AppliedFilters>({
+    accid: '',
+    dateFrom: '',
+    dateTo: '',
+    type: '',
+    status: 'unposted',
+  })
   const [debouncedQuery, setDebouncedQuery] = useState(searchQuery)
   const [sort] = useState<TxSort>('oldest')
   const [page, setPage] = useState(1)
   const [customers, setCustomers] = useState<TransactionCustomer[]>(
     () => peekTransactionCustomers() ?? [],
   )
+  const [groups, setGroups] = useState<CustomerGroup[]>(() => peekCustomerGroups() ?? [])
 
   const params: TransactionListParams = useMemo(
     () => ({
       q: debouncedQuery.trim(),
-      accid: draft.accid ? Number(draft.accid) : '',
-      dateFrom: draft.dateFrom,
-      dateTo: draft.dateTo,
-      kind: draft.kind,
+      accid: applied.accid ? Number(applied.accid) : '',
+      dateFrom: applied.dateFrom,
+      dateTo: applied.dateTo,
+      type: applied.type,
+      kind: 'all',
+      status: applied.status,
       sort,
     }),
-    [draft, debouncedQuery, sort],
+    [applied, debouncedQuery, sort],
   )
 
   const seeded = peekTransactions(params, page)
@@ -118,6 +141,22 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
       .then(setCustomers)
       .catch(() => toast.error('Could not load customers'))
   }, [])
+
+  useEffect(() => {
+    loadCustomerGroups()
+      .then(setGroups)
+      .catch(() => toast.error('Could not load groups'))
+  }, [])
+
+  const groupOptions = useMemo(
+    () => [
+      { value: '', label: 'All groups' },
+      ...groups
+        .filter((g) => g.groupName)
+        .map((g) => ({ value: g.groupName, label: g.groupName })),
+    ],
+    [groups],
+  )
 
   const applyTxPage = useCallback(
     (data: { rows: TransactionRow[]; total: number; summary: TransactionSummary }) => {
@@ -274,7 +313,45 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
 
   useEffect(() => {
     setPage(1)
-  }, [draft.accid, draft.dateFrom, draft.dateTo, draft.kind])
+  }, [applied.accid, applied.dateFrom, applied.dateTo, applied.type, applied.status])
+
+  function normalizeDraft(next: DraftFilters): DraftFilters {
+    const range = applyDateRange('from', next.dateFrom, next.dateFrom, next.dateTo)
+    return { ...next, dateFrom: range.from, dateTo: range.to }
+  }
+
+  function applyFilters(nextDraft: DraftFilters) {
+    const normalized = normalizeDraft(nextDraft)
+    setDraft(normalized)
+    setApplied({
+      accid: normalized.accid,
+      dateFrom: normalized.dateFrom,
+      dateTo: normalized.dateTo,
+      type: normalized.type,
+      status: 'all',
+    })
+    setPage(1)
+  }
+
+  function runSearch() {
+    applyFilters(draft)
+  }
+
+  function onCustomerChange(next: string) {
+    setDraft((current) => ({
+      ...current,
+      accid: next,
+      type: next ? '' : current.type,
+    }))
+  }
+
+  function onGroupChange(next: string) {
+    setDraft((current) => ({
+      ...current,
+      type: next,
+      accid: next ? '' : current.accid,
+    }))
+  }
 
   function openCustomer(row: TransactionRow) {
     if (!canViewCustomer) return
@@ -314,13 +391,13 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
         className={`${panel} relative z-10 overflow-visible rounded-2xl p-4 lg:p-5`}
         aria-label="Filters"
       >
-        <div className="relative z-30 grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2 xl:grid-cols-[1.2fr_1.4fr_1fr]">
+        <div className="relative z-30 grid grid-cols-1 gap-3 overflow-visible sm:grid-cols-2 xl:grid-cols-[1.1fr_1.4fr_1.1fr_auto] xl:items-end">
           <div className="relative z-30 flex min-w-0 flex-col gap-1.5 overflow-visible">
             <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">Customer</span>
             <SearchableCustomerFilter
               value={draft.accid}
               customers={customers}
-              onChange={(next) => setDraft((current) => ({ ...current, accid: next }))}
+              onChange={onCustomerChange}
             />
           </div>
 
@@ -343,28 +420,25 @@ export function TransactionsPage({ homePath, searchQuery = '' }: Props) {
           </div>
 
           <div className="relative z-10 flex min-w-0 flex-col gap-1.5 overflow-visible">
-            <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">
-              Transaction Type
-            </span>
+            <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">Group</span>
             <MenuFilter
               fullWidth
               icon="type"
-              value={draft.kind === 'all' ? '' : draft.kind}
-              placeholder="All Types"
-              ariaLabel="Filter by transaction type"
-              onChange={(next) =>
-                setDraft((current) => ({
-                  ...current,
-                  kind: next === 'credit' || next === 'debit' ? next : 'all',
-                }))
-              }
-              options={[
-                { value: '', label: 'All Types' },
-                { value: 'credit', label: 'Credit' },
-                { value: 'debit', label: 'Debit' },
-              ]}
+              value={draft.type}
+              placeholder="All groups"
+              ariaLabel="Filter by group"
+              onChange={onGroupChange}
+              options={groupOptions}
             />
           </div>
+
+          <button
+            type="button"
+            onClick={runSearch}
+            className="inline-flex h-[42px] w-full shrink-0 cursor-pointer items-center justify-center rounded-xl border-0 bg-fuel px-5 text-[0.85rem] font-extrabold text-ink shadow-[0_6px_14px_rgba(245,197,24,0.28)] hover:brightness-95 sm:w-auto xl:self-end"
+          >
+            Search
+          </button>
         </div>
       </section>
 

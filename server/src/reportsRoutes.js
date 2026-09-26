@@ -296,6 +296,13 @@ const itemIdParamSchema = z.object({
   itemId: z.coerce.number().int().positive().max(2_147_483_647),
 })
 
+const stockLedgerQuerySchema = z.object({
+  dateFrom: optionalIsoDate,
+  dateTo: optionalIsoDate,
+  offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+})
+
 const saleRateBodySchema = z.object({
   saleRate: z.coerce.number().finite().min(0).max(99_999_999.99),
 })
@@ -369,11 +376,14 @@ function formatIsoDate(dated) {
 
 reportsRouter.get('/stock-statement/:itemId', async (req, res) => {
   const parsed = itemIdParamSchema.safeParse(req.params)
-  if (!parsed.success) {
-    return res.status(400).json({ ok: false, message: 'Invalid item id' })
+  const queryParsed = stockLedgerQuerySchema.safeParse(req.query)
+  if (!parsed.success || !queryParsed.success) {
+    return res.status(400).json({ ok: false, message: 'Invalid request' })
   }
 
   const { itemId } = parsed.data
+  const { offset, limit } = queryParsed.data
+  const { dateFrom, dateTo } = resolveDateRange(queryParsed.data.dateFrom, queryParsed.data.dateTo)
 
   try {
     const pool = await getPool()
@@ -404,11 +414,69 @@ reportsRouter.get('/stock-statement/:itemId', async (req, res) => {
     const stockCol = await resolveStocklegerCompanyCol(pool)
     const slCols = await stocklegerColumns(pool)
     const sxSelect = slCols.has('SX') ? 'SL.SX' : 'CAST(NULL AS money) AS SX'
-    const ledgerResult = await pool
+    const companySql = stocklegerCompanySql('SL', stockCol)
+    const dateFilterSql = `
+      AND (@hasFrom = 0 OR CAST(SL.Dated AS date) >= @dateFrom)
+      AND (@hasTo = 0 OR CAST(SL.Dated AS date) <= @dateTo)
+    `
+
+    let openingStock = 0
+    if (dateFrom) {
+      const openingResult = await pool
+        .request()
+        .input('itemId', sql.Int, itemId)
+        .input('bizId', sql.Int, bizId)
+        .input('dateFrom', sql.Date, dateFrom)
+        .query(`
+          SELECT ISNULL(SUM(ISNULL(SL.QtyIn, 0) - ISNULL(SL.QtyOut, 0)), 0) AS OpeningStock
+          FROM dbo.Stockleger SL
+          WHERE SL.ItemId = @itemId
+            AND ${companySql}
+            AND CAST(SL.Dated AS date) < @dateFrom
+        `)
+      openingStock = money(openingResult.recordset[0]?.OpeningStock)
+    }
+
+    const summaryReq = pool
       .request()
       .input('itemId', sql.Int, itemId)
       .input('bizId', sql.Int, bizId)
-      .query(`
+      .input('hasFrom', sql.Bit, dateFrom ? 1 : 0)
+      .input('hasTo', sql.Bit, dateTo ? 1 : 0)
+      .input('dateFrom', sql.Date, dateFrom || '1900-01-01')
+      .input('dateTo', sql.Date, dateTo || '1900-01-01')
+    const summaryResult = await summaryReq.query(`
+      SELECT
+        COUNT(*) AS Total,
+        SUM(ISNULL(SL.QtyIn, 0)) AS StockIn,
+        SUM(ISNULL(SL.QtyOut, 0)) AS StockOut,
+        CONVERT(varchar(10), MIN(SL.Dated), 23) AS MinDate,
+        CONVERT(varchar(10), MAX(SL.Dated), 23) AS MaxDate
+      FROM dbo.Stockleger SL
+      WHERE SL.ItemId = @itemId
+        AND ${companySql}
+        ${dateFilterSql}
+    `)
+    const summaryRow = summaryResult.recordset[0] || {}
+    const total = money(summaryRow.Total)
+    const totalStockIn = money(summaryRow.StockIn)
+    const totalStockOut = money(summaryRow.StockOut)
+    const rangeFrom = dateFrom || cleanText(summaryRow.MinDate)
+    const rangeTo = dateTo || cleanText(summaryRow.MaxDate)
+
+    const ledgerReq = pool
+      .request()
+      .input('itemId', sql.Int, itemId)
+      .input('bizId', sql.Int, bizId)
+      .input('hasFrom', sql.Bit, dateFrom ? 1 : 0)
+      .input('hasTo', sql.Bit, dateTo ? 1 : 0)
+      .input('dateFrom', sql.Date, dateFrom || '1900-01-01')
+      .input('dateTo', sql.Date, dateTo || '1900-01-01')
+      .input('opening', sql.Money, openingStock)
+      .input('offset', sql.Int, offset)
+      .input('limit', sql.Int, limit)
+    const ledgerResult = await ledgerReq.query(`
+      WITH Filtered AS (
         SELECT
           SL.Trid,
           SL.Dated,
@@ -421,33 +489,36 @@ reportsRouter.get('/stock-statement/:itemId', async (req, res) => {
           SL.RateOut,
           SL.PrValue,
           SL.RefNo,
-          SUM(ISNULL(SL.QtyIn, 0) - ISNULL(SL.QtyOut, 0)) OVER (
-            ORDER BY SL.Dated, SL.Trid
+          @opening + SUM(ISNULL(SL.QtyIn, 0) - ISNULL(SL.QtyOut, 0)) OVER (
+            ORDER BY SL.Dated ASC, SL.Trid ASC
             ROWS UNBOUNDED PRECEDING
           ) AS Balance
         FROM dbo.Stockleger SL
         WHERE SL.ItemId = @itemId
-          AND ${stocklegerCompanySql('SL', stockCol)}
-        ORDER BY SL.Dated, SL.Trid
-      `)
-
-    let totalStockIn = 0
-    let totalStockOut = 0
-    let minDate = ''
-    let maxDate = ''
+          AND ${companySql}
+          ${dateFilterSql}
+      )
+      SELECT
+        Trid,
+        Dated,
+        VNo,
+        Description,
+        SX,
+        QtyIn,
+        QtyOut,
+        RateIn,
+        RateOut,
+        PrValue,
+        RefNo,
+        Balance
+      FROM Filtered
+      ORDER BY Dated ASC, Trid ASC
+      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+    `)
 
     const entries = ledgerResult.recordset.map((row) => {
       const qtyIn = money(row.QtyIn)
       const qtyOut = money(row.QtyOut)
-      totalStockIn += qtyIn
-      totalStockOut += qtyOut
-
-      const iso = formatIsoDate(row.Dated)
-      if (iso) {
-        if (!minDate || iso < minDate) minDate = iso
-        if (!maxDate || iso > maxDate) maxDate = iso
-      }
-
       const rate =
         qtyIn > 0
           ? money(row.RateIn ?? row.PrValue)
@@ -469,8 +540,7 @@ reportsRouter.get('/stock-statement/:itemId', async (req, res) => {
       }
     })
 
-    const closingBalance =
-      entries.length > 0 ? entries[entries.length - 1].balance : money(itemRow.Stock)
+    const closingBalance = openingStock + totalStockIn - totalStockOut
 
     return res.json({
       ok: true,
@@ -482,9 +552,12 @@ reportsRouter.get('/stock-statement/:itemId', async (req, res) => {
         stock: money(itemRow.Stock),
         stockValue: money(itemRow.StockValue),
       },
-      openingStock: 0,
-      dateFrom: minDate,
-      dateTo: maxDate,
+      openingStock,
+      dateFrom: rangeFrom,
+      dateTo: rangeTo,
+      total,
+      offset,
+      limit,
       entries,
       totals: {
         stockIn: totalStockIn,

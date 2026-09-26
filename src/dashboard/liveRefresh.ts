@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react'
 import { clearPageCache } from './pageCache'
 
 export const DATA_CHANGED_EVENT = 'fuelledger:data-changed'
-export const LIVE_TX_POLL_MS = 4000
+/** Poll open pages — was 4s and hit API 429 (60/min shared limiter). */
+export const LIVE_TX_POLL_MS = 15000
 
 /** Call after any write (Cash Book save, delete, …) so open lists refresh immediately. */
 export function notifyDataChanged() {

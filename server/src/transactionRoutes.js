@@ -58,7 +58,15 @@ const listQuerySchema = z.object({
   accid: optionalAccid,
   dateFrom: optionalIsoDate,
   dateTo: optionalIsoDate,
+  type: z
+    .string()
+    .trim()
+    .max(100)
+    .regex(/^[a-zA-Z0-9 ._'-]*$/)
+    .optional()
+    .default(''),
   kind: z.enum(['all', 'credit', 'debit']).default('all'),
+  status: z.enum(['unposted', 'all']).optional().default('unposted'),
   sort: z.enum(['recent', 'oldest']).default('oldest'),
   page: z.coerce.number().int().min(1).max(10000).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
@@ -246,6 +254,10 @@ function voucherKeysCte() {
           AND (
             @hasAccid = 0
             OR MAX(CASE WHEN Tx.Accid = @accid THEN 1 ELSE 0 END) = 1
+          )
+          AND (
+            @hasGroup = 0
+            OR MAX(CASE WHEN Tx.GroupName = @groupName THEN 1 ELSE 0 END) = 1
           )
           AND (
             @kind = N'all'
@@ -562,8 +574,9 @@ const UNPOSTED_SQL = `(L.Status IS NULL OR LTRIM(RTRIM(L.Status)) = N'')`
 /** Credit/Debit pages — same as before: NULL + Posted. */
 const ALL_STATUS_SQL = `(L.Status IS NULL OR L.Status = N'Posted')`
 
-function statusSqlForKind(kind) {
+function statusSqlForKind(kind, status) {
   if (kind === 'credit' || kind === 'debit') return ALL_STATUS_SQL
+  if (status === 'all') return ALL_STATUS_SQL
   return UNPOSTED_SQL
 }
 
@@ -576,10 +589,12 @@ function filterSql(alias) {
   const description = alias === 'Tx' ? 'Tx.Description' : 'L.Description'
   const refNo = alias === 'Tx' ? 'Tx.RefNo' : 'L.RefNo'
   const vno = alias === 'Tx' ? 'Tx.VNo' : 'L.VNo'
+  const groupName = alias === 'Tx' ? 'Tx.GroupName' : 'G.GroupName'
   return `
       AND (@hasAccid = 0 OR ${accid} = @accid)
       AND (@hasFrom = 0 OR CAST(${dated} AS date) >= @dateFrom)
       AND (@hasTo = 0 OR CAST(${dated} AS date) <= @dateTo)
+      AND (@hasGroup = 0 OR ${groupName} = @groupName)
       AND (
         @kind = N'all'
         OR (@kind = N'credit' AND ISNULL(${credit}, 0) > 0 AND ${accid} <> 1)
@@ -597,6 +612,7 @@ function filterSql(alias) {
 
 function bindListParams(request, parsed) {
   const { dateFrom, dateTo } = resolveDateRange(parsed.dateFrom, parsed.dateTo)
+  const groupName = parsed.type || ''
   request.input('accid', sql.Int, parsed.accid || 0)
   request.input('hasAccid', sql.Bit, parsed.accid ? 1 : 0)
   request.input('kind', sql.NVarChar(10), parsed.kind)
@@ -604,6 +620,8 @@ function bindListParams(request, parsed) {
   request.input('hasTo', sql.Bit, dateTo ? 1 : 0)
   request.input('dateFrom', sql.Date, dateFrom || '1900-01-01')
   request.input('dateTo', sql.Date, dateTo || '1900-01-01')
+  request.input('hasGroup', sql.Bit, groupName ? 1 : 0)
+  request.input('groupName', sql.NVarChar(100), groupName)
   request.input('q', sql.NVarChar(100), parsed.q || '')
   request.input('qLike', sql.NVarChar(120), parsed.q ? likeContains(parsed.q) : '')
   return { dateFrom, dateTo }
@@ -621,7 +639,7 @@ transactionRouter.get('/stats', async (req, res) => {
     return res.status(400).json({ ok: false, message: 'Invalid request' })
   }
   const { kind } = parsed.data
-  const STATUS_SQL = statusSqlForKind(kind)
+  const STATUS_SQL = statusSqlForKind(kind, 'all')
   const amountCol = kind === 'credit' ? 'Credit' : 'Debit'
   const kindFilter =
     kind === 'credit'
@@ -710,9 +728,9 @@ transactionRouter.get('/', async (req, res) => {
     return res.status(400).json({ ok: false, message: 'Invalid request' })
   }
 
-  const { kind, sort, page, pageSize } = parsed.data
+  const { kind, sort, page, pageSize, status } = parsed.data
   const offset = (page - 1) * pageSize
-  const STATUS_SQL = statusSqlForKind(kind)
+  const STATUS_SQL = statusSqlForKind(kind, status)
 
   try {
     const pool = await getPool()
@@ -749,11 +767,13 @@ transactionRouter.get('/', async (req, res) => {
           L.Credit,
           L.Description,
           L.Accid,
-          A.AccName
+          A.AccName,
+          G.GroupName
         FROM dbo.Leger L
         INNER JOIN dbo.AccReg A ON A.Accid = L.Accid
         INNER JOIN dbo.GroupReg G ON G.GroupId = A.GroupId
         WHERE ${STATUS_SQL}
+          AND (@hasGroup = 0 OR G.GroupName = @groupName)
       ),
       ${voucherKeysCte()}
       SELECT COUNT(*) AS TotalVouchers FROM VoucherRank
@@ -788,6 +808,7 @@ transactionRouter.get('/', async (req, res) => {
           L.RHO,
           L.Accid,
           A.AccName,
+          G.GroupName,
           L.Bal,
           ISNULL(A.OpBal, 0) + SUM(ISNULL(L.Debit, 0) - ISNULL(L.Credit, 0))
             OVER (PARTITION BY L.Accid ORDER BY L.Trid ROWS UNBOUNDED PRECEDING) AS RunningBalance
@@ -795,6 +816,7 @@ transactionRouter.get('/', async (req, res) => {
         INNER JOIN dbo.AccReg A ON A.Accid = L.Accid
         INNER JOIN dbo.GroupReg G ON G.GroupId = A.GroupId
         WHERE ${STATUS_SQL}
+          AND (@hasGroup = 0 OR G.GroupName = @groupName)
       ),
       ${voucherKeysCte()},
       PagedVouchers AS (

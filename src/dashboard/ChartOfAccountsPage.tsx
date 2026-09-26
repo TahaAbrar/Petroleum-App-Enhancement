@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { toast } from '../toast'
 import { CoaAccountLedgerPage } from './CoaAccountLedgerPage'
@@ -11,9 +11,13 @@ import {
   type CoaChart,
   type CoaSubChart,
 } from './chartOfAccounts'
+import { useCoaGroupHistory } from './coa/useCoaAccountHistory'
+import { applyDateRange, DateRangeFilter } from './filters'
 import { LoadingHint } from './loading'
 import { MobileSearchField } from './MobileSearchField'
 import { panel } from './styles'
+import { formatTxDate, ledgerAmount } from './transactions'
+import { TxTableColgroup } from './TxListViews'
 
 type Level = 'charts' | 'subCharts' | 'accounts'
 
@@ -69,11 +73,9 @@ function ChartOfAccountsBrowse({
 
   const [charts, setCharts] = useState<CoaChart[]>([])
   const [subCharts, setSubCharts] = useState<CoaSubChart[]>([])
-  const [accounts, setAccounts] = useState<CoaAccount[]>([])
 
   const [chartsLoading, setChartsLoading] = useState(true)
   const [subChartsLoading, setSubChartsLoading] = useState(false)
-  const [accountsLoading, setAccountsLoading] = useState(false)
 
   const q = searchQuery.trim().toLowerCase()
 
@@ -108,22 +110,6 @@ function ChartOfAccountsBrowse({
     return () => ac.abort()
   }, [chart, level])
 
-  useEffect(() => {
-    if (!subChart || level !== 'accounts') return
-    const ac = new AbortController()
-    setAccountsLoading(true)
-    fetchCoaAccounts(subChart.groupId, ac.signal)
-      .then(setAccounts)
-      .catch((err) => {
-        if (ac.signal.aborted) return
-        toast.error(err instanceof Error ? err.message : 'Could not load accounts')
-      })
-      .finally(() => {
-        if (!ac.signal.aborted) setAccountsLoading(false)
-      })
-    return () => ac.abort()
-  }, [subChart, level])
-
   const filteredCharts = useMemo(() => {
     if (!q || level !== 'charts') return charts
     return charts.filter(
@@ -141,27 +127,15 @@ function ChartOfAccountsBrowse({
     )
   }, [subCharts, q, level])
 
-  const filteredAccounts = useMemo(() => {
-    if (!q || level !== 'accounts') return accounts
-    return accounts.filter(
-      (a) =>
-        a.name.toLowerCase().includes(q) ||
-        a.accNo.toLowerCase().includes(q) ||
-        String(a.accid).includes(q),
-    )
-  }, [accounts, q, level])
-
   function openChart(item: CoaChart) {
     setChart(item)
     setSubChart(null)
     setSubCharts([])
-    setAccounts([])
     setLevel('subCharts')
   }
 
   function openSubChart(item: CoaSubChart) {
     setSubChart(item)
-    setAccounts([])
     setLevel('accounts')
   }
 
@@ -177,14 +151,12 @@ function ChartOfAccountsBrowse({
     setChart(null)
     setSubChart(null)
     setSubCharts([])
-    setAccounts([])
   }
 
   function goSubCharts() {
     if (!chart) return
     setLevel('subCharts')
     setSubChart(null)
-    setAccounts([])
   }
 
   const title =
@@ -296,16 +268,12 @@ function ChartOfAccountsBrowse({
       )}
 
       {level === 'accounts' && subChart && chart && (
-        accountsLoading ? (
-          <LoadingHint label="Loading accounts…" />
-        ) : (
-          <AccountsLevel
-            chart={chart}
-            subChart={subChart}
-            accounts={filteredAccounts}
-            onOpen={openAccount}
-          />
-        )
+        <AccountsLevel
+          chart={chart}
+          subChart={subChart}
+          searchQuery={searchQuery}
+          onOpen={openAccount}
+        />
       )}
     </div>
   )
@@ -466,17 +434,128 @@ function SubChartsLevel({
   )
 }
 
+function defaultMonthDateRange() {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return { from: `${y}-${m}-01`, to: `${y}-${m}-${d}` }
+}
+
 function AccountsLevel({
   chart,
   subChart,
-  accounts,
+  searchQuery = '',
   onOpen,
 }: {
   chart: CoaChart
   subChart: CoaSubChart
-  accounts: CoaAccount[]
+  searchQuery?: string
   onOpen: (a: CoaAccount) => void
 }) {
+  const defaults = useMemo(() => defaultMonthDateRange(), [])
+  const [draftFrom, setDraftFrom] = useState(defaults.from)
+  const [draftTo, setDraftTo] = useState(defaults.to)
+  const [appliedFrom, setAppliedFrom] = useState('')
+  const [appliedTo, setAppliedTo] = useState('')
+  const [accounts, setAccounts] = useState<CoaAccount[]>([])
+  const [accountsLoading, setAccountsLoading] = useState(true)
+
+  const history = useCoaGroupHistory(subChart.groupId, appliedFrom, appliedTo)
+  const afterTenMobileRef = useRef<HTMLLIElement | null>(null)
+  const afterTenDesktopRef = useRef<HTMLTableRowElement | null>(null)
+  const sentinelMobileRef = useRef<HTMLLIElement | null>(null)
+  const sentinelDesktopRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const ac = new AbortController()
+    setAccountsLoading(true)
+    fetchCoaAccounts(
+      subChart.groupId,
+      { dateFrom: appliedFrom || undefined, dateTo: appliedTo || undefined },
+      ac.signal,
+    )
+      .then(setAccounts)
+      .catch((err) => {
+        if (ac.signal.aborted) return
+        setAccounts([])
+        toast.error(err instanceof Error ? err.message : 'Could not load accounts')
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setAccountsLoading(false)
+      })
+    return () => ac.abort()
+  }, [subChart.groupId, appliedFrom, appliedTo])
+
+  useEffect(() => {
+    if (history.loading || !history.hasMore) return
+    const observers: IntersectionObserver[] = []
+    const watch = (target: Element | null) => {
+      if (!target) return
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((e) => e.isIntersecting)) history.revealMore()
+        },
+        { root: null, rootMargin: '220px 0px', threshold: 0.01 },
+      )
+      observer.observe(target)
+      observers.push(observer)
+    }
+    watch(afterTenMobileRef.current)
+    watch(afterTenDesktopRef.current)
+    watch(sentinelMobileRef.current)
+    watch(sentinelDesktopRef.current)
+    return () => observers.forEach((o) => o.disconnect())
+  }, [history.revealMore, history.hasMore, history.rows.length, history.loading])
+
+  const q = searchQuery.trim().toLowerCase()
+  const filteredAccounts = useMemo(() => {
+    if (!q) return accounts
+    return accounts.filter(
+      (a) =>
+        a.name.toLowerCase().includes(q) ||
+        a.accNo.toLowerCase().includes(q) ||
+        String(a.accid).includes(q),
+    )
+  }, [accounts, q])
+
+  const emptyMessage = history.emptyRange
+    ? 'No transactions in this date range.'
+    : 'No transactions found.'
+
+  function runSearch() {
+    const range = applyDateRange('from', draftFrom, draftFrom, draftTo)
+    const nextFrom = range.from
+    const nextTo = range.to
+    setDraftFrom(nextFrom)
+    setDraftTo(nextTo)
+    setAppliedFrom(nextFrom)
+    setAppliedTo(nextTo)
+  }
+
+  function openTxAccount(accid: number | undefined, name: string, balance: number) {
+    if (!accid) return
+    const match = accounts.find((a) => a.accid === accid)
+    if (match) {
+      onOpen(match)
+      return
+    }
+    onOpen({
+      accid,
+      accNo: '',
+      name,
+      phone: '',
+      urdu: '',
+      balance,
+      totalDebit: 0,
+      totalCredit: 0,
+      status: 'Active',
+      normalBalance: 'Debit',
+      groupName: subChart.name,
+      chartId: chart.chartId,
+    })
+  }
+
   return (
     <>
       <article className={`${panel} flex flex-wrap items-center gap-3 rounded-2xl p-4`}>
@@ -490,38 +569,90 @@ function AccountsLevel({
           <p className="mt-0.5 mb-0 text-[1rem] font-extrabold text-ink">{subChart.name}</p>
         </div>
         <span className="rounded-full bg-[#f4f5f7] px-3 py-1 text-[0.72rem] font-bold text-muted">
-          {accounts.length} accounts
+          {filteredAccounts.length} accounts
         </span>
       </article>
 
-      {accounts.length === 0 ? (
+      <section
+        className={`${panel} relative z-10 overflow-visible rounded-2xl p-4`}
+        aria-label="Date filter"
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:max-w-md">
+            <span className="text-[0.72rem] font-bold tracking-[0.02em] text-muted">Date Range</span>
+            <DateRangeFilter
+              grouped
+              fullWidth
+              from={draftFrom}
+              to={draftTo}
+              onFromChange={(next) => {
+                const range = applyDateRange('from', next, draftFrom, draftTo)
+                setDraftFrom(range.from)
+                setDraftTo(range.to)
+              }}
+              onToChange={(next) => {
+                const range = applyDateRange('to', next, draftFrom, draftTo)
+                setDraftFrom(range.from)
+                setDraftTo(range.to)
+              }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={runSearch}
+            className="inline-flex w-full shrink-0 cursor-pointer items-center justify-center rounded-xl border-0 bg-fuel px-5 py-2.5 text-[0.85rem] font-extrabold text-ink shadow-[0_6px_14px_rgba(245,197,24,0.28)] hover:brightness-95 sm:w-auto"
+          >
+            Search
+          </button>
+        </div>
+      </section>
+
+      {accountsLoading ? (
+        <LoadingHint label="Loading accounts…" />
+      ) : filteredAccounts.length === 0 ? (
         <EmptyState message="No accounts found." />
       ) : (
         <>
           <ul className="m-0 flex list-none flex-col gap-2.5 p-0 lg:hidden">
-            {accounts.map((item) => (
+            {filteredAccounts.map((item) => (
               <li key={item.accid}>
                 <button
                   type="button"
                   onClick={() => onOpen(item)}
-                  className={`${panel} flex w-full cursor-pointer items-start justify-between gap-2 rounded-2xl border-0 p-3.5 text-left hover:bg-[#fcfcfd]`}
+                  className={`${panel} w-full cursor-pointer rounded-2xl border-0 p-3.5 text-left hover:bg-[#fcfcfd]`}
                 >
-                  <div>
+                  <div className="flex items-start justify-between gap-2">
                     <p className="mb-0 text-[0.92rem] font-extrabold text-ink">{item.name}</p>
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      <span className="rounded-full bg-[#f4f5f7] px-2 py-0.5 text-[0.65rem] font-bold text-muted">
-                        {item.normalBalance}
-                      </span>
-                      <StatusPill status={item.status} />
+                    <span className="inline-flex shrink-0 items-center gap-1 text-[0.78rem] font-bold text-[#c99700]">
+                      Open <ChevronRight />
+                    </span>
+                  </div>
+                  <div className="mt-2.5 grid grid-cols-3 gap-2">
+                    <div>
+                      <p className="m-0 text-[0.65rem] font-bold tracking-[0.04em] text-muted uppercase">
+                        Balance
+                      </p>
+                      <p className="mt-0.5 mb-0 text-[0.84rem] font-extrabold text-ink">
+                        {formatCoaPkr(item.balance)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="m-0 text-[0.65rem] font-bold tracking-[0.04em] text-muted uppercase">
+                        Debit
+                      </p>
+                      <p className="mt-0.5 mb-0 text-[0.84rem] font-bold text-debit">
+                        {formatCoaPkr(item.totalDebit ?? 0)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="m-0 text-[0.65rem] font-bold tracking-[0.04em] text-muted uppercase">
+                        Credit
+                      </p>
+                      <p className="mt-0.5 mb-0 text-[0.84rem] font-bold text-credit">
+                        {formatCoaPkr(item.totalCredit ?? 0)}
+                      </p>
                     </div>
                   </div>
-                  <p
-                    className={`m-0 shrink-0 text-right text-[0.88rem] font-extrabold ${
-                      item.normalBalance === 'Credit' ? 'text-credit' : 'text-ink'
-                    }`}
-                  >
-                    {formatCoaPkr(item.balance)}
-                  </p>
                 </button>
               </li>
             ))}
@@ -532,31 +663,27 @@ function AccountsLevel({
               <table className="w-full min-w-[720px] border-collapse">
                 <thead>
                   <tr className="bg-[#fafbfc]">
-                    {['Account', 'Normal Balance', 'Balance (PKR)', 'Status', ''].map((h) => (
-                      <Th key={h || 'action'}>{h}</Th>
-                    ))}
+                    <Th>Account</Th>
+                    <Th className="text-right">Balance (PKR)</Th>
+                    <Th className="text-right">Debit</Th>
+                    <Th className="text-right">Credit</Th>
+                    <Th>{''}</Th>
                   </tr>
                 </thead>
                 <tbody>
-                  {accounts.map((item) => (
+                  {filteredAccounts.map((item) => (
                     <tr
                       key={item.accid}
                       className="cursor-pointer hover:bg-[#fcfcfd]"
                       onClick={() => onOpen(item)}
                     >
                       <Td className="font-semibold text-ink">{item.name}</Td>
-                      <Td>{item.normalBalance}</Td>
-                      <Td
-                        className={
-                          item.normalBalance === 'Credit'
-                            ? 'font-bold text-credit'
-                            : 'font-bold text-ink'
-                        }
-                      >
-                        {formatCoaPkr(item.balance)}
+                      <Td className="text-right font-bold text-ink">{formatCoaPkr(item.balance)}</Td>
+                      <Td className="text-right font-bold text-debit">
+                        {formatCoaPkr(item.totalDebit ?? 0)}
                       </Td>
-                      <Td>
-                        <StatusPill status={item.status} />
+                      <Td className="text-right font-bold text-credit">
+                        {formatCoaPkr(item.totalCredit ?? 0)}
                       </Td>
                       <Td>
                         <span className="inline-flex items-center gap-1 text-[0.78rem] font-bold text-[#c99700]">
@@ -571,6 +698,183 @@ function AccountsLevel({
           </section>
         </>
       )}
+
+      <section className={`${panel} rounded-2xl p-3.5 lg:p-5`} aria-label="Group transactions">
+        <div className="mb-3.5 flex items-center justify-between gap-2">
+          <h2 className="m-0 text-[1rem] font-extrabold tracking-[-0.01em] text-ink">
+            All Transactions
+          </h2>
+          {!history.loading && history.total > 0 ? (
+            <span className="text-[0.72rem] font-bold text-muted">{history.total} total</span>
+          ) : null}
+        </div>
+
+        {history.loading ? (
+          <LoadingHint label="Loading transactions…" />
+        ) : history.rows.length === 0 ? (
+          <p className="m-0 py-10 text-center text-sm font-semibold text-muted">{emptyMessage}</p>
+        ) : (
+          <>
+            <ul className="m-0 flex list-none flex-col gap-2.5 p-0 lg:hidden">
+              {history.rows.map((row, index) => (
+                <li
+                  key={row.trid}
+                  ref={
+                    (index + 1) % 30 === 10
+                      ? afterTenMobileRef
+                      : index === history.rows.length - 1
+                        ? sentinelMobileRef
+                        : undefined
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={() => openTxAccount(row.accid, row.customer || '', row.balance)}
+                    className="w-full cursor-pointer rounded-xl border border-[#f1f2f4] bg-white p-3 text-left hover:bg-[#fcfcfd]"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="mb-0 text-[0.72rem] font-semibold text-muted">
+                          {formatTxDate(row.when)} · V.No {row.vno || '—'} ·{' '}
+                          {row.paymentType || '—'}
+                        </p>
+                        <p className="mt-1 mb-0 text-[0.88rem] font-extrabold text-ink">
+                          {row.customer || '—'}
+                        </p>
+                        <p className="mt-0.5 mb-0 text-[0.78rem] text-muted">
+                          {row.description && row.description !== '—' ? row.description : '—'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-2.5 grid grid-cols-3 gap-2">
+                      <div>
+                        <p className="m-0 text-[0.65rem] font-bold tracking-[0.04em] text-muted uppercase">
+                          Debit
+                        </p>
+                        <p
+                          className={`mt-0.5 mb-0 text-[0.84rem] font-bold ${
+                            (row.debit ?? 0) > 0 ? 'text-debit' : 'text-ink'
+                          }`}
+                        >
+                          {ledgerAmount(row.debit ?? 0)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="m-0 text-[0.65rem] font-bold tracking-[0.04em] text-muted uppercase">
+                          Credit
+                        </p>
+                        <p
+                          className={`mt-0.5 mb-0 text-[0.84rem] font-bold ${
+                            (row.credit ?? 0) > 0 ? 'text-credit' : 'text-ink'
+                          }`}
+                        >
+                          {ledgerAmount(row.credit ?? 0)}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="m-0 text-[0.65rem] font-bold tracking-[0.04em] text-muted uppercase">
+                          Acc Bal.
+                        </p>
+                        <p className="mt-0.5 mb-0 text-[0.84rem] font-bold text-ink">
+                          {ledgerAmount(row.balance)}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            <div className="hidden min-w-0 overflow-x-auto rounded-xl border border-line lg:block">
+              <table className="w-full table-fixed border-collapse">
+                <TxTableColgroup canDelete={false} />
+                <thead>
+                  <tr className="bg-[#fafbfc]">
+                    <Th>Date</Th>
+                    <Th>V.No</Th>
+                    <Th>Account</Th>
+                    <Th>Description</Th>
+                    <Th>Type</Th>
+                    <Th className="text-right">Debit</Th>
+                    <Th className="text-right">Credit</Th>
+                    <Th className="text-right">Acc Bal.</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.rows.map((row, index) => (
+                    <tr
+                      key={row.trid}
+                      ref={(index + 1) % 30 === 10 ? afterTenDesktopRef : undefined}
+                      className="cursor-pointer hover:bg-[#fcfcfd]"
+                      onClick={() => openTxAccount(row.accid, row.customer || '', row.balance)}
+                    >
+                      <Td>
+                        <span className="block leading-snug break-words">
+                          {formatTxDate(row.when)}
+                        </span>
+                      </Td>
+                      <Td className="font-semibold text-ink">{row.vno || '—'}</Td>
+                      <Td className="min-w-0 font-semibold text-ink">
+                        <span className="line-clamp-2 break-words" title={row.customer}>
+                          {row.customer || '—'}
+                        </span>
+                      </Td>
+                      <Td className="min-w-0">
+                        <span
+                          className="line-clamp-2 break-words"
+                          title={row.description || ''}
+                        >
+                          {row.description && row.description !== '—' ? row.description : '—'}
+                        </span>
+                      </Td>
+                      <Td>{row.paymentType || '—'}</Td>
+                      <Td
+                        className={`text-right font-bold ${
+                          (row.debit ?? 0) > 0 ? 'text-debit' : ''
+                        }`}
+                      >
+                        {ledgerAmount(row.debit ?? 0)}
+                      </Td>
+                      <Td
+                        className={`text-right font-bold ${
+                          (row.credit ?? 0) > 0 ? 'text-credit' : ''
+                        }`}
+                      >
+                        {ledgerAmount(row.credit ?? 0)}
+                      </Td>
+                      <Td className="text-right font-bold text-ink">
+                        {ledgerAmount(row.balance)}
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div ref={sentinelDesktopRef} className="h-1" aria-hidden="true" />
+            </div>
+
+            {history.loadingMore ? (
+              <p className="mt-3 mb-0 text-center text-[0.78rem] font-semibold text-muted">
+                Loading more…
+              </p>
+            ) : null}
+
+            <div className="mt-4 grid grid-cols-2 gap-2.5 sm:max-w-md sm:ml-auto">
+              <article className="rounded-2xl bg-debit-bg px-3 py-3">
+                <p className="m-0 text-[0.68rem] font-semibold text-muted">Total Debit</p>
+                <p className="mt-1 mb-0 text-[1.05rem] font-extrabold text-debit">
+                  {formatCoaPkr(history.summary.totalDebit)}
+                </p>
+              </article>
+              <article className="rounded-2xl bg-credit-bg px-3 py-3">
+                <p className="m-0 text-[0.68rem] font-semibold text-muted">Total Credit</p>
+                <p className="mt-1 mb-0 text-[1.05rem] font-extrabold text-credit">
+                  {formatCoaPkr(history.summary.totalCredit)}
+                </p>
+              </article>
+            </div>
+          </>
+        )}
+      </section>
     </>
   )
 }
@@ -609,7 +913,7 @@ function EmptyState({ message }: { message: string }) {
   )
 }
 
-function StatusPill({ status }: { status: 'Active' | 'Inactive' }) {
+export function StatusPill({ status }: { status: 'Active' | 'Inactive' }) {
   return (
     <span
       className={`inline-flex rounded-full px-2.5 py-1 text-[0.68rem] font-bold ${
@@ -621,9 +925,11 @@ function StatusPill({ status }: { status: 'Active' | 'Inactive' }) {
   )
 }
 
-function Th({ children }: { children: ReactNode }) {
+function Th({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <th className="border-b border-line px-2.5 py-2.5 text-left text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase whitespace-nowrap">
+    <th
+      className={`border-b border-line px-2.5 py-2.5 text-left text-[0.68rem] font-bold tracking-[0.04em] text-muted uppercase whitespace-nowrap ${className}`}
+    >
       {children}
     </th>
   )
@@ -638,7 +944,7 @@ function Td({
 }) {
   return (
     <td
-      className={`border-b border-[#f1f2f4] px-2.5 py-3.5 text-[0.84rem] whitespace-nowrap text-[#374151] ${className}`}
+      className={`border-b border-[#f1f2f4] px-2 py-3 align-top text-[0.78rem] text-[#374151] ${className}`}
     >
       {children}
     </td>

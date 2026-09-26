@@ -22,6 +22,8 @@ export type CoaAccount = {
   phone: string
   urdu: string
   balance: number
+  totalDebit: number
+  totalCredit: number
   status: 'Active' | 'Inactive'
   normalBalance: 'Debit' | 'Credit'
   groupName: string
@@ -63,6 +65,18 @@ export type CoaTransaction = {
   amount: number
   balance: number
   by: string
+  accid?: number
+  customer?: string
+  vno?: string
+  debit?: number
+  credit?: number
+  description?: string
+  paymentType?: string
+}
+
+export type CoaGroupTxSummary = {
+  totalDebit: number
+  totalCredit: number
 }
 
 export function formatCoaPkr(value: number) {
@@ -88,9 +102,17 @@ export async function fetchCoaSubCharts(chartId: number, signal?: AbortSignal) {
   return data.subCharts
 }
 
-export async function fetchCoaAccounts(groupId: number, signal?: AbortSignal) {
+export async function fetchCoaAccounts(
+  groupId: number,
+  params?: { dateFrom?: string; dateTo?: string },
+  signal?: AbortSignal,
+) {
+  const search = new URLSearchParams()
+  if (params?.dateFrom) search.set('dateFrom', params.dateFrom)
+  if (params?.dateTo) search.set('dateTo', params.dateTo)
+  const qs = search.toString()
   const data = await apiGet<{ ok: true; accounts: CoaAccount[] }>(
-    `/api/chart-of-accounts/groups/${groupId}/accounts`,
+    `/api/chart-of-accounts/groups/${groupId}/accounts${qs ? `?${qs}` : ''}`,
     { signal },
   )
   return data.accounts
@@ -136,7 +158,7 @@ export async function fetchCoaAccountTransactions(
   search.set('kind', params.kind)
   if (params.dateFrom) search.set('dateFrom', params.dateFrom)
   if (params.dateTo) search.set('dateTo', params.dateTo)
-  search.set('sort', params.sort ?? 'recent')
+  search.set('sort', params.sort ?? 'oldest')
   search.set('offset', String(params.offset ?? 0))
   search.set('limit', String(params.limit ?? 15))
   return apiGet<{
@@ -146,4 +168,33 @@ export async function fetchCoaAccountTransactions(
     limit: number
     transactions: CoaTransaction[]
   }>(`/api/chart-of-accounts/accounts/${accid}/transactions?${search.toString()}`, { signal })
+}
+
+export async function fetchCoaGroupTransactions(
+  groupId: number,
+  params: {
+    kind?: CoaHistoryKind
+    dateFrom?: string
+    dateTo?: string
+    sort?: CoaHistorySort
+    offset?: number
+    limit?: number
+  },
+  signal?: AbortSignal,
+) {
+  const search = new URLSearchParams()
+  search.set('kind', params.kind ?? 'all')
+  if (params.dateFrom) search.set('dateFrom', params.dateFrom)
+  if (params.dateTo) search.set('dateTo', params.dateTo)
+  search.set('sort', params.sort ?? 'oldest')
+  search.set('offset', String(params.offset ?? 0))
+  search.set('limit', String(params.limit ?? 30))
+  return apiGet<{
+    ok: true
+    total: number
+    offset: number
+    limit: number
+    summary: CoaGroupTxSummary
+    transactions: CoaTransaction[]
+  }>(`/api/chart-of-accounts/groups/${groupId}/transactions?${search.toString()}`, { signal })
 }
