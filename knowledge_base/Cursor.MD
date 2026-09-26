@@ -288,6 +288,9 @@ Verified: login → `/customers` → open **Aarzi Dasti Khata** → details/info
 - 2026-09-15: **Live deploy** — `index-DGXA3w5b.js` → `/var/www/html/fatimafs`; `fatimafs-api` restarted; site 200 + db:up.
 - 2026-09-15: **Fuel Sales table** — dashboard chart replaced with 20-row table (Date, ItemQty, Rate, Amount, Cash, Udhar); Sales page all columns. Live `index-DcRDOOeS.js`.
 - 2026-09-15: **Dashboard fuel cards + Banks** — Sales page removed. 4 cards Diesel/Petrol/Cash/Udhar; Banks panel with Total Balance. Live `index-DJay2R15.js`.
+- 2026-09-15: **+ Total diesel/petrol** — 6 cards (Cash/Udhar + Total Diesel + Total Petrol, max DNo Qty L). Live `index-DOFacFsB.js`.
+- 2026-09-15: **Fuel card order** — Total Diesel → Cash → Udhar; Total Petrol → Cash → Udhar.
+- 2026-09-16: **Fuel panel replaces chart** — Credit vs Debit removed; Fuel Sales 2-col Diesel|Petrol (Total→Udhar→Cash) beside Banks; top fuel cards removed. Live `index-Bb4VonzF.js`.
 - `knowledge_base/` is the shared coordination folder.
 
 ## Frontend `src/` architecture (2026-08-26 exploration)

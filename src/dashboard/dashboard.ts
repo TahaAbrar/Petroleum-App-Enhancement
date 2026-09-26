@@ -5,10 +5,12 @@ export type DashboardStats = {
   totalCredit: number
   totalDebit: number
   todayTransactions: number
+  dieselCash: number
+  dieselUdhar: number
   dieselSale: number
+  petrolCash: number
+  petrolUdhar: number
   petrolSale: number
-  cashSale: number
-  udharSale: number
 }
 
 export type CreditDebitPoint = {
@@ -28,10 +30,12 @@ export const EMPTY_DASHBOARD_STATS: DashboardStats = {
   totalCredit: 0,
   totalDebit: 0,
   todayTransactions: 0,
+  dieselCash: 0,
+  dieselUdhar: 0,
   dieselSale: 0,
+  petrolCash: 0,
+  petrolUdhar: 0,
   petrolSale: 0,
-  cashSale: 0,
-  udharSale: 0,
 }
 
 export async function fetchDashboardStats(signal?: AbortSignal) {

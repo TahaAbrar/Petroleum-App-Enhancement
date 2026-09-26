@@ -26,6 +26,10 @@ app.use(
   cors({
     origin(origin, cb) {
       if (!origin || env.corsOrigin.includes(origin)) return cb(null, true)
+      // Cursor / IDE port-forward uses random localhost ports (e.g. :45783)
+      if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) {
+        return cb(null, true)
+      }
       // Vite `--host 0.0.0.0` sends Origin as the public/LAN URL, not localhost
       if (env.nodeEnv !== 'production' && /^https?:\/\//.test(origin)) return cb(null, true)
       return cb(new Error('Not allowed by CORS'))

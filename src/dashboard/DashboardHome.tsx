@@ -3,14 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { getUserRole } from '../lib/auth'
 import { toast } from '../toast'
 import { formatPkrAmount } from './customers'
-import { CreditDebitChart } from './charts'
 import {
   EMPTY_DASHBOARD_STATS,
   fetchBanks,
-  fetchCreditDebitChart,
   fetchDashboardStats,
   type BankRow,
-  type CreditDebitPoint,
   type DashboardStats,
 } from './dashboard'
 import { StatIcon } from './icons'
@@ -64,8 +61,6 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
   const [loading, setLoading] = useState(() => !seeded)
   const [stats, setStats] = useState<DashboardStats>(EMPTY_DASHBOARD_STATS)
   const [statsLoading, setStatsLoading] = useState(true)
-  const [creditDebit, setCreditDebit] = useState<CreditDebitPoint[]>([])
-  const [creditDebitLoading, setCreditDebitLoading] = useState(true)
   const [banks, setBanks] = useState<BankRow[]>([])
   const [bankTotal, setBankTotal] = useState(0)
   const [banksLoading, setBanksLoading] = useState(true)
@@ -148,24 +143,6 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
       })
       .finally(() => {
         if (!cancelled) setStatsLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    setCreditDebitLoading(true)
-    fetchCreditDebitChart()
-      .then((data) => {
-        if (!cancelled) setCreditDebit(data)
-      })
-      .catch(() => {
-        if (!cancelled) setCreditDebit([])
-      })
-      .finally(() => {
-        if (!cancelled) setCreditDebitLoading(false)
       })
     return () => {
       cancelled = true
@@ -347,48 +324,28 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
     },
   ]
 
-  const fuelCards = [
+  function fmtLiters(n: number) {
+    return n.toLocaleString('en-US', { maximumFractionDigits: 2 })
+  }
+
+  const fuelColumns = [
     {
       id: 'diesel',
-      label: 'Total Diesel Sale',
-      value: statsLoading
-        ? '…'
-        : stats.dieselSale.toLocaleString('en-US', { maximumFractionDigits: 2 }),
-      unit: statsLoading ? '' : 'L',
-      isPkr: false,
-      icon: 'debit' as const,
-      mobileSpan: 'half' as const,
-      highlightLabel: true,
+      title: 'Diesel',
+      rows: [
+        { label: 'Total Diesel Sale', value: stats.dieselSale },
+        { label: 'Total Diesel Udhar Sale', value: stats.dieselUdhar },
+        { label: 'Total Diesel Cash Sale', value: stats.dieselCash },
+      ],
     },
     {
       id: 'petrol',
-      label: 'Total Petrol Sale',
-      value: statsLoading
-        ? '…'
-        : stats.petrolSale.toLocaleString('en-US', { maximumFractionDigits: 2 }),
-      unit: statsLoading ? '' : 'L',
-      isPkr: false,
-      icon: 'credit' as const,
-      mobileSpan: 'half' as const,
-      highlightLabel: true,
-    },
-    {
-      id: 'cash',
-      label: 'Total Cash',
-      value: statsLoading ? '…' : formatPkrAmount(stats.cashSale),
-      isPkr: !statsLoading,
-      icon: 'tx' as const,
-      mobileSpan: 'half' as const,
-      highlightLabel: true,
-    },
-    {
-      id: 'udhar',
-      label: 'Total Udhar',
-      value: statsLoading ? '…' : formatPkrAmount(stats.udharSale),
-      isPkr: !statsLoading,
-      icon: 'customers' as const,
-      mobileSpan: 'half' as const,
-      highlightLabel: true,
+      title: 'Petrol',
+      rows: [
+        { label: 'Total Petrol Sale', value: stats.petrolSale },
+        { label: 'Total Petrol Udhar Sale', value: stats.petrolUdhar },
+        { label: 'Total Petrol Cash Sale', value: stats.petrolCash },
+      ],
     },
   ]
 
@@ -476,26 +433,37 @@ export function DashboardHome({ txPath, searchQuery = '', onSearchChange }: Prop
         {statCards.map((s, i) => renderStatCard(s, i))}
       </section>
 
-      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4 xl:gap-4" aria-label="Fuel sales summary">
-        {fuelCards.map((s, i) => renderStatCard(s, i + 4))}
-      </section>
-
       <section className="grid grid-cols-1 gap-3.5 xl:grid-cols-2 xl:gap-4" aria-label="Analytics">
         <article className={`${panel} rounded-3xl p-4`} style={{ animationDelay: '0.22s' }}>
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="m-0 text-[0.95rem] font-extrabold tracking-[-0.01em] xl:text-base">
-              Credit vs Debit
-            </h2>
-            <div className="flex items-center gap-2.5 text-[0.65rem] font-semibold text-muted xl:text-xs">
-              <span className="inline-flex items-center gap-1">
-                <i className="inline-block size-2 rounded-sm bg-fuel" /> Credit
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <i className="inline-block size-2 rounded-sm bg-ink" /> Debit
-              </span>
-            </div>
+          <h2 className="mb-3 mt-0 text-[0.95rem] font-extrabold tracking-[-0.01em] xl:text-base">
+            Fuel Sales
+          </h2>
+          <div className="grid grid-cols-2 gap-3 xl:gap-4">
+            {fuelColumns.map((col) => (
+              <div key={col.id} className="min-w-0">
+                <p className="mb-2 mt-0 text-[0.78rem] font-extrabold uppercase tracking-[0.04em] text-ink xl:text-[0.82rem]">
+                  {col.title}
+                </p>
+                <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
+                  {col.rows.map((row) => (
+                    <li key={row.label} className="min-w-0 border-t border-line pt-2 first:border-0 first:pt-0">
+                      <p className="m-0 text-[0.72rem] font-bold leading-tight text-muted xl:text-[0.78rem]">
+                        {row.label}
+                      </p>
+                      <p className="mt-1 mb-0 text-[1rem] font-semibold leading-none tracking-[-0.02em] tabular-nums text-ink xl:text-[1.1rem]">
+                        {statsLoading ? '…' : fmtLiters(row.value)}
+                        {!statsLoading ? (
+                          <span className="ml-1.5 inline-block text-[0.85rem] font-extrabold text-ink">
+                            L
+                          </span>
+                        ) : null}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
-          <CreditDebitChart data={creditDebit} loading={creditDebitLoading} />
         </article>
 
         <article className={`${panel} flex flex-col rounded-3xl p-4`} style={{ animationDelay: '0.26s' }}>

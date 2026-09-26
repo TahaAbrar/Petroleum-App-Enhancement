@@ -79,7 +79,8 @@ dashboardRouter.get('/stats', async (_req, res) => {
     const pool = await getPool()
     // Headings stay Total Credit / Total Debit / Today's Transactions.
     // Values = today's Unposted only (NULL/blank Status). Posted → amounts leave the cards.
-    // Fuel cards = all-time PTS Amount totals (SELECT only).
+    // Fuel cards = max duty (PTS.DNo): Diesel/Petrol × Cash/Udhar as Qty liters.
+    const maxDuty = `(SELECT MAX(DNo) FROM dbo.PTS WHERE DNo IS NOT NULL)`
     const result = await pool.request().query(`
       SELECT
         (SELECT COUNT(*) FROM dbo.AccReg) AS TotalCustomers,
@@ -101,14 +102,24 @@ dashboardRouter.get('/stats', async (_req, res) => {
          INNER JOIN dbo.GroupReg G ON G.GroupId = A.GroupId
          WHERE ${UNPOSTED_SQL}
            AND ${TODAY_SQL}) AS TodayTransactions,
-        (SELECT SUM(CASE WHEN P.Itemid = 1 THEN ISNULL(P.Qty, 0) ELSE 0 END)
-         FROM dbo.PTS P) AS DieselSale,
-        (SELECT SUM(CASE WHEN P.Itemid = 2 THEN ISNULL(P.Qty, 0) ELSE 0 END)
-         FROM dbo.PTS P) AS PetrolSale,
-        (SELECT SUM(CASE WHEN P.Accid IS NULL THEN ISNULL(P.Amount, 0) ELSE 0 END)
-         FROM dbo.PTS P) AS CashSale,
-        (SELECT SUM(CASE WHEN P.Accid IS NOT NULL THEN ISNULL(P.Amount, 0) ELSE 0 END)
-         FROM dbo.PTS P) AS UdharSale
+        (SELECT SUM(ISNULL(P.Qty, 0))
+         FROM dbo.PTS P
+         WHERE P.DNo = ${maxDuty} AND P.Itemid = 1 AND P.Accid IS NULL) AS DieselCash,
+        (SELECT SUM(ISNULL(P.Qty, 0))
+         FROM dbo.PTS P
+         WHERE P.DNo = ${maxDuty} AND P.Itemid = 1 AND P.Accid IS NOT NULL) AS DieselUdhar,
+        (SELECT SUM(ISNULL(P.Qty, 0))
+         FROM dbo.PTS P
+         WHERE P.DNo = ${maxDuty} AND P.Itemid = 1) AS DieselSale,
+        (SELECT SUM(ISNULL(P.Qty, 0))
+         FROM dbo.PTS P
+         WHERE P.DNo = ${maxDuty} AND P.Itemid = 2 AND P.Accid IS NULL) AS PetrolCash,
+        (SELECT SUM(ISNULL(P.Qty, 0))
+         FROM dbo.PTS P
+         WHERE P.DNo = ${maxDuty} AND P.Itemid = 2 AND P.Accid IS NOT NULL) AS PetrolUdhar,
+        (SELECT SUM(ISNULL(P.Qty, 0))
+         FROM dbo.PTS P
+         WHERE P.DNo = ${maxDuty} AND P.Itemid = 2) AS PetrolSale
     `)
     const row = result.recordset[0] || {}
     return res.json({
@@ -118,10 +129,12 @@ dashboardRouter.get('/stats', async (_req, res) => {
         totalCredit: money(row.TotalCredit),
         totalDebit: money(row.TotalDebit),
         todayTransactions: money(row.TodayTransactions),
+        dieselCash: money(row.DieselCash),
+        dieselUdhar: money(row.DieselUdhar),
         dieselSale: money(row.DieselSale),
+        petrolCash: money(row.PetrolCash),
+        petrolUdhar: money(row.PetrolUdhar),
         petrolSale: money(row.PetrolSale),
-        cashSale: money(row.CashSale),
-        udharSale: money(row.UdharSale),
       },
     })
   } catch (err) {

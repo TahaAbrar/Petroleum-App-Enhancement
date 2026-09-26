@@ -6,7 +6,7 @@ import {
   type CustomerGroup,
   type CustomerStatus,
 } from './customers'
-import { fetchCreditDebitChart, fetchDashboardStats, fetchBanks } from './dashboard'
+import { fetchDashboardStats, fetchBanks } from './dashboard'
 import {
   fetchKindStats,
   fetchTransactionCustomers,
@@ -135,7 +135,6 @@ export function prefetchDashboardPages() {
   void loadTransactionCustomers({ force: true })
   void loadTransactionsPage(EMPTY_TX_FILTERS, 1, { force: true })
   void fetchDashboardStats().catch(() => {})
-  void fetchCreditDebitChart().catch(() => {})
   void fetchBanks().catch(() => {})
   void fetchKindStats('credit').catch(() => {})
   void fetchKindStats('debit').catch(() => {})
